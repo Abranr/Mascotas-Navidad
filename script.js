@@ -1,111 +1,328 @@
-let pets = JSON.parse(localStorage.getItem('christmasPets')) || [
-    {
-        name: "Rex Navideño",
-        type: "Dinosaurio",
-        age: 65,
-        description: "Rex es el dinosaurio más alegre de la temporada. Le encanta decorar árboles navideños y cantar villancicos con su poderoso rugido. ¡Un verdadero amigo festivo!",
-        emoji: "🦖🎅",
-        votes: 5
+// Datos y estado de la aplicación
+const AppState = {
+    pets: [],
+    searchTerm: '',
+    filterType: 'all',
+    sortBy: 'recent',
+    showEditor: false,
+    editingPet: null,
+    showSuccess: false,
+    successMessage: '',
+    editorState: {
+        filter: 'none',
+        background: 'none',
+        brightness: 100,
+        contrast: 100,
+        saturation: 100,
+        stickers: []
     },
-    {
-        name: "Stella Estrella",
-        type: "Dinosaurio",
-        age: 150,
-        description: "Stella es una dinosaurio de cuello largo que brilla como la estrella de Belén. Es gentil, cariñosa y le encanta iluminar la oscuridad invernal.",
-        emoji: "🦕⭐",
-        votes: 3
-    }
-];
-
-let currentImage = null;
-let stickers = [];
-let canvas, ctx;
-let currentFilter = 'none';
-let currentBackground = 'none';
-let backgroundImages = {};
-let originalImageData = null;
-let imageWithoutBackground = null;
-let brightness = 100;
-let contrast = 100;
-let saturation = 100;
-
-// URLs de fondos navideños
-const backgroundUrls = {
-    'christmas-tree': 'https://images.unsplash.com/photo-1605708896111-4ed0b31d6de5?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=80',
-    'snow-landscape': 'https://images.unsplash.com/photo-1455459182396-ae46100617cb?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=80',
-    'fireplace': 'https://images.unsplash.com/photo-1576086213369-97a306d36557?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=80',
-    'gifts': 'https://images.unsplash.com/photo-1544787219-7f47ccb76574?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=80',
-    'santa-workshop': 'https://images.unsplash.com/photo-1574359411659-619d4d5bcd5d?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=80',
-    'christmas-livingroom': 'https://images.unsplash.com/photo-1578683010236-d716f9a3f461?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=80',
-    'winter-forest': 'https://images.unsplash.com/photo-1455218873509-8097305ee378?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=80'
+    currentTheme: 'christmas'
 };
 
-// Precargar imágenes de fondo
-Object.keys(backgroundUrls).forEach(key => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.src = backgroundUrls[key];
-    backgroundImages[key] = img;
+// Configuración
+const CONFIG = {
+    STORAGE_KEY: 'navidad-jurasica-pets',
+    BACKGROUNDS: [
+        { id: 'none', name: 'Sin fondo', color: 'linear-gradient(135deg, #f5f5f5, #e5e5e5)' },
+        { id: 'red', name: 'Rojo Navideño', color: 'linear-gradient(135deg, #8B0000, #c41e3a)' },
+        { id: 'green', name: 'Verde Pino', color: 'linear-gradient(135deg, #0a5d0a, #064706)' },
+        { id: 'gold', name: 'Dorado Festivo', color: 'linear-gradient(135deg, #b8860b, #d4af37)' },
+        { id: 'snow', name: 'Nieve', color: 'linear-gradient(135deg, #e0f7ff, #ffffff)' },
+        { id: 'night', name: 'Noche Estrellada', color: 'linear-gradient(135deg, #0a1128, #1e3a5f)' }
+    ],
+    FILTERS: [
+        { id: 'none', name: 'Normal' },
+        { id: 'warm', name: 'Cálido' },
+        { id: 'vintage', name: 'Vintage' },
+        { id: 'festive', name: 'Festivo' },
+        { id: 'golden', name: 'Dorado' }
+    ],
+    STICKERS: ['🎄', '🎅', '🦌', '❄️', '⭐', '🎁', '🔔', '🕯️', '🌟', '🦕', '🦖', '☃️']
+};
+
+// Inicialización cuando el DOM está listo
+document.addEventListener('DOMContentLoaded', function() {
+    initializeApp();
 });
 
-function savePets() {
-    localStorage.setItem('christmasPets', JSON.stringify(pets));
+function initializeApp() {
+    createSnowEffect();
+    initializeCountdown();
+    initializeEventListeners();
+    loadPets();
+    initializeEditor();
 }
 
-function renderPets() {
-    const gallery = document.getElementById('petsGallery');
-    if (pets.length === 0) {
-        gallery.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-state-icon">🦕</div>
-                <h3>No hay mascotas aún</h3>
-                <p>Agrega tu primera mascota navideña usando el formulario arriba</p>
-            </div>`;
+// Efecto de nieve mejorado
+function createSnowEffect() {
+    const snowContainer = document.getElementById('snow-container');
+    const snowflakesCount = 50;
+    
+    for (let i = 0; i < snowflakesCount; i++) {
+        const snowflake = document.createElement('div');
+        snowflake.className = 'snowflake';
+        snowflake.textContent = '❄';
+        snowflake.style.left = `${Math.random() * 100}%`;
+        snowflake.style.top = `-${Math.random() * 100}px`;
+        snowflake.style.animationDelay = `${Math.random() * 5}s`;
+        snowflake.style.animationDuration = `${Math.random() * 3 + 5}s`;
+        snowflake.style.fontSize = `${Math.random() * 15 + 10}px`;
+        snowflake.style.opacity = `${Math.random() * 0.7 + 0.3}`;
+        snowContainer.appendChild(snowflake);
+    }
+}
+
+// Contador de Navidad
+function initializeCountdown() {
+    function updateCountdown() {
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        let christmas = new Date(currentYear, 11, 25);
+        if (now > christmas) christmas = new Date(currentYear + 1, 11, 25);
+        
+        const diff = christmas - now;
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        
+        document.getElementById('countdown').textContent = 
+            `🎅 ${days} días ${hours}h ${minutes}m para Navidad 🎄`;
+    }
+    
+    updateCountdown();
+    setInterval(updateCountdown, 60000);
+}
+
+// Event listeners mejorados
+function initializeEventListeners() {
+    // Formulario de mascota
+    document.getElementById('pet-form').addEventListener('submit', handleAddPet);
+    
+    // Vista previa de imagen
+    document.getElementById('image-input').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const preview = document.getElementById('image-preview');
+                preview.querySelector('img').src = e.target.result;
+                preview.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+    
+    // Filtros y búsqueda
+    document.getElementById('search-input').addEventListener('input', function(e) {
+        AppState.searchTerm = e.target.value;
+        renderPets();
+    });
+    
+    document.getElementById('type-filter').addEventListener('change', function(e) {
+        AppState.filterType = e.target.value;
+        renderPets();
+    });
+    
+    document.getElementById('sort-by').addEventListener('change', function(e) {
+        AppState.sortBy = e.target.value;
+        renderPets();
+    });
+    
+    // Editor
+    document.getElementById('save-edits').addEventListener('click', applyEdits);
+    document.getElementById('cancel-edits').addEventListener('click', closeEditor);
+    
+    // Sliders del editor
+    ['brightness', 'contrast', 'saturation'].forEach(adj => {
+        const slider = document.getElementById(adj);
+        const value = document.getElementById(`${adj}-value`);
+        
+        slider.addEventListener('input', function() {
+            value.textContent = `${this.value}%`;
+            AppState.editorState[adj] = Number(this.value);
+            applyEditorEffects();
+        });
+    });
+    
+    // Cambio de tema
+    document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+}
+
+// Gestión de mascotas
+function loadPets() {
+    try {
+        const storedPets = localStorage.getItem(CONFIG.STORAGE_KEY);
+        if (storedPets) {
+            AppState.pets = JSON.parse(storedPets);
+        }
+        renderPets();
+        updateTypeFilter();
+    } catch (error) {
+        console.log('No hay mascotas guardadas aún');
+    } finally {
+        document.getElementById('loading-message').classList.add('hidden');
+    }
+}
+
+function savePets() {
+    localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(AppState.pets));
+}
+
+function handleAddPet(e) {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const file = formData.get('image');
+    
+    // Validación básica
+    if (!formData.get('name') || !formData.get('type') || !formData.get('age') || !formData.get('description')) {
+        showSuccessMessage('Por favor, completa todos los campos obligatorios');
         return;
     }
+    
+    const newPet = {
+        id: Date.now().toString(),
+        name: formData.get('name'),
+        type: formData.get('type'),
+        age: formData.get('age'),
+        description: formData.get('description'),
+        image: null,
+        editedImage: null,
+        votes: 0,
+        timestamp: Date.now(),
+        dateAdded: new Date().toLocaleDateString('es-ES')
+    };
+    
+    if (file && file.size > 0) {
+        // Validar tamaño de archivo (5MB máximo)
+        if (file.size > 5 * 1024 * 1024) {
+            showSuccessMessage('La imagen es demasiado grande. Máximo 5MB permitido.');
+            return;
+        }
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            newPet.image = e.target.result;
+            addPetToApp(newPet);
+        };
+        reader.readAsDataURL(file);
+    } else {
+        addPetToApp(newPet);
+    }
+    
+    e.target.reset();
+    document.getElementById('image-preview').style.display = 'none';
+}
 
-    const maxVotes = Math.max(0, ...pets.map(pet => pet.votes || 0));
+function addPetToApp(pet) {
+    AppState.pets.unshift(pet);
+    savePets();
+    renderPets();
+    updateTypeFilter();
+    showSuccessMessage('¡Mascota agregada con éxito! 🦕🎄');
+}
 
-    gallery.innerHTML = pets.map((pet, index) => {
+function deletePet(petId) {
+    if (confirm('¿Estás seguro de que quieres eliminar esta mascota?')) {
+        AppState.pets = AppState.pets.filter(pet => pet.id !== petId);
+        savePets();
+        renderPets();
+        updateTypeFilter();
+        showSuccessMessage('Mascota eliminada exitosamente 🗑️');
+    }
+}
+
+function handleVote(petId) {
+    const pet = AppState.pets.find(p => p.id === petId);
+    if (pet) {
+        pet.votes += 1;
+        savePets();
+        renderPets();
+        showSuccessMessage('¡Voto registrado! ❤️');
+    }
+}
+
+function handleSelect(petName) {
+    showSuccessMessage(`¡${petName} es tu compañero navideño! 🎉🦕`);
+}
+
+// Renderizado de mascotas mejorado
+function renderPets() {
+    const container = document.getElementById('pets-container');
+    const emptyMessage = document.getElementById('empty-message');
+    
+    const filteredPets = getFilteredPets();
+    
+    if (filteredPets.length === 0) {
+        container.innerHTML = '';
+        emptyMessage.classList.remove('hidden');
+        return;
+    }
+    
+    emptyMessage.classList.add('hidden');
+    
+    const maxVotes = Math.max(0, ...AppState.pets.map(p => p.votes));
+    
+    container.innerHTML = filteredPets.map(pet => {
         const isMostVoted = pet.votes > 0 && pet.votes === maxVotes;
         const displayImage = pet.editedImage || pet.image;
         
         return `
             <div class="pet-card ${isMostVoted ? 'most-voted' : ''}">
-                ${isMostVoted ? '<div class="most-voted-badge">👑 Más Votada</div>' : ''}
-                <button class="delete-btn" onclick="deletePet(${index})" title="Eliminar">
-                    <i class="fas fa-times"></i>
+                ${isMostVoted ? '<div class="most-voted-badge"><i class="fas fa-crown"></i> Más Votada</div>' : ''}
+                
+                <button class="delete-btn" onclick="deletePet('${pet.id}')">
+                    <i class="fas fa-trash"></i>
                 </button>
-                <div class="pet-image-container">
+                
+                <div class="pet-image">
                     ${displayImage ? 
                         `<img src="${displayImage}" alt="${pet.name}">` : 
-                        `<div class="pet-emoji">${pet.emoji || '🦕'}</div>`
+                        '<div class="pet-image-placeholder">🦕</div>'
                     }
                 </div>
-                <div class="pet-content">
+                
+                <div class="pet-info">
                     <div class="pet-header">
                         <h3 class="pet-name">${pet.name}</h3>
                         <span class="pet-type">${pet.type}</span>
                     </div>
-                    <div class="pet-info">
-                        <div class="info-row">
-                            <span class="info-label">🎂 Edad:</span>
-                            <span class="info-value">${pet.age} años</span>
-                        </div>
+                    
+                    <div class="pet-details">
+                        <p class="pet-age"><i class="fas fa-birthday-cake"></i> Edad: ${pet.age} años</p>
+                        <p class="pet-description">${pet.description}</p>
                     </div>
-                    <p class="pet-description">${pet.description}</p>
+                    
+                    <div class="pet-stats">
+                        <span class="pet-date">Agregado: ${pet.dateAdded}</span>
+                        <span class="pet-id">ID: ${pet.id.substring(0, 8)}</span>
+                    </div>
+                    
                     <div class="pet-actions">
-                        <button class="vote-btn" onclick="votePet(${index})">
+                        <button class="action-btn vote-btn" onclick="handleVote('${pet.id}')">
                             <i class="fas fa-heart"></i> Votar
                         </button>
-                        <div class="vote-count">${pet.votes || 0} votos</div>
-                        <button class="select-btn" onclick="selectPet('${pet.name}')">
-                            <i class="fas fa-gift"></i> Elegir esta Mascota
+                        
+                        <div class="votes-count">❤️ ${pet.votes} votos</div>
+                        
+                        <button class="action-btn select-btn" onclick="handleSelect('${pet.name}')">
+                            <i class="fas fa-gift"></i> Elegir Mascota
                         </button>
-                        ${pet.image ? `
-                        <button class="edit-btn" onclick="editPhoto(${index})">
-                            <i class="fas fa-magic"></i> Añadir Toques Navideños
-                        </button>` : ''}
+                        
+                        <div class="action-buttons-grid">
+                            ${pet.image ? `
+                                <button class="small-btn edit-btn" onclick="openEditor('${pet.id}')" title="Editar">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                            ` : ''}
+                            ${displayImage ? `
+                                <button class="small-btn download-btn" onclick="downloadImage('${pet.id}')" title="Descargar">
+                                    <i class="fas fa-download"></i>
+                                </button>
+                                <button class="small-btn share-btn" onclick="shareImage('${pet.id}')" title="Compartir">
+                                    <i class="fas fa-share"></i>
+                                </button>
+                            ` : ''}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -113,46 +330,193 @@ function renderPets() {
     }).join('');
 }
 
-function votePet(index) {
-    pets[index].votes = (pets[index].votes || 0) + 1;
-    savePets();
-    renderPets();
+function getFilteredPets() {
+    return AppState.pets
+        .filter(pet => {
+            const matchesSearch = pet.name.toLowerCase().includes(AppState.searchTerm.toLowerCase()) ||
+                                pet.description.toLowerCase().includes(AppState.searchTerm.toLowerCase());
+            const matchesType = AppState.filterType === 'all' || pet.type === AppState.filterType;
+            return matchesSearch && matchesType;
+        })
+        .sort((a, b) => {
+            if (AppState.sortBy === 'votes') return b.votes - a.votes;
+            if (AppState.sortBy === 'name') return a.name.localeCompare(b.name);
+            return b.timestamp - a.timestamp;
+        });
 }
 
-function selectPet(petName) {
-    const message = document.getElementById('selectionMessage'); 
-    const messageText = document.getElementById('messageText'); 
-    const overlay = document.getElementById('overlay');
+function updateTypeFilter() {
+    const typeFilter = document.getElementById('type-filter');
+    const types = ['all', ...new Set(AppState.pets.map(p => p.type))];
     
-    messageText.textContent = `Has elegido a ${petName} como tu compañero navideño. ¡Felices fiestas juntos! 🎉`;
-    message.classList.add('show'); 
-    overlay.classList.add('show');
+    typeFilter.innerHTML = types.map(type => 
+        `<option value="${type}">${type === 'all' ? 'Todos los tipos' : type}</option>`
+    ).join('');
     
-    setTimeout(() => { 
-        message.classList.remove('show'); 
-        overlay.classList.remove('show'); 
-    }, 4000);
+    typeFilter.value = AppState.filterType;
 }
 
-function deletePet(index) {
-    if (confirm('¿Estás seguro de eliminar esta mascota?')) { 
-        pets.splice(index, 1); 
-        savePets();
-        renderPets(); 
+// Funciones de utilidad mejoradas
+function showSuccessMessage(msg) {
+    const successMessage = document.getElementById('success-message');
+    const successText = document.getElementById('success-text');
+    
+    successText.textContent = msg;
+    successMessage.classList.remove('hidden');
+    
+    setTimeout(() => {
+        successMessage.classList.add('hidden');
+    }, 3000);
+}
+
+function downloadImage(petId) {
+    const pet = AppState.pets.find(p => p.id === petId);
+    if (!pet) return;
+    
+    const img = pet.editedImage || pet.image;
+    if (!img) return;
+    
+    const link = document.createElement('a');
+    link.href = img;
+    link.download = `${pet.name}-navidad.png`;
+    link.click();
+    showSuccessMessage('¡Imagen descargada! 📥');
+}
+
+async function shareImage(petId) {
+    const pet = AppState.pets.find(p => p.id === petId);
+    if (!pet) return;
+    
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: `${pet.name} - Navidad Jurásica`,
+                text: pet.description,
+                url: window.location.href
+            });
+        } catch (err) {
+            console.log('Error al compartir:', err);
+        }
+    } else {
+        // Fallback para navegadores que no soportan Web Share API
+        if (navigator.clipboard) {
+            try {
+                await navigator.clipboard.writeText(`${pet.name} - ${pet.description}`);
+                showSuccessMessage('¡Información copiada al portapapeles! 📋');
+            } catch (err) {
+                showSuccessMessage('Función de compartir no disponible 📱');
+            }
+        } else {
+            showSuccessMessage('Función de compartir no disponible 📱');
+        }
     }
 }
 
-function editPhoto(index) {
-    const pet = pets[index];
-    if (!pet.image) return;
+// Editor de imágenes mejorado
+function initializeEditor() {
+    // Fondos
+    const backgroundsContainer = document.getElementById('backgrounds-container');
+    backgroundsContainer.innerHTML = CONFIG.BACKGROUNDS.map(bg => `
+        <button class="background-btn ${bg.id === 'none' ? 'active' : ''}" 
+                data-background="${bg.id}" 
+                style="background: ${bg.color}"
+                title="${bg.name}">
+        </button>
+    `).join('');
     
-    const editor = document.getElementById('photoEditor');
-    canvas = document.getElementById('photoCanvas');
-    ctx = canvas.getContext('2d');
+    // Filtros
+    const filtersContainer = document.getElementById('filters-container');
+    filtersContainer.innerHTML = CONFIG.FILTERS.map(filter => `
+        <button class="filter-btn ${filter.id === 'none' ? 'active' : ''}" 
+                data-filter="${filter.id}">
+            ${filter.name}
+        </button>
+    `).join('');
     
+    // Stickers
+    const stickersContainer = document.getElementById('stickers-container');
+    stickersContainer.innerHTML = CONFIG.STICKERS.map(emoji => `
+        <button class="sticker-btn" data-sticker="${emoji}">
+            ${emoji}
+        </button>
+    `).join('');
+    
+    // Event listeners del editor
+    document.querySelectorAll('.background-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.background-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            AppState.editorState.background = this.dataset.background;
+            applyEditorEffects();
+        });
+    });
+    
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            AppState.editorState.filter = this.dataset.filter;
+            applyEditorEffects();
+        });
+    });
+    
+    document.querySelectorAll('.sticker-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            addSticker(this.dataset.sticker);
+        });
+    });
+}
+
+function openEditor(petId) {
+    const pet = AppState.pets.find(p => p.id === petId);
+    if (!pet || !pet.image) return;
+    
+    AppState.editingPet = pet;
+    AppState.showEditor = true;
+    AppState.editorState = {
+        filter: 'none',
+        background: 'none',
+        brightness: 100,
+        contrast: 100,
+        saturation: 100,
+        stickers: []
+    };
+    
+    // Resetear controles
+    document.getElementById('brightness').value = 100;
+    document.getElementById('contrast').value = 100;
+    document.getElementById('saturation').value = 100;
+    document.getElementById('brightness-value').textContent = '100%';
+    document.getElementById('contrast-value').textContent = '100%';
+    document.getElementById('saturation-value').textContent = '100%';
+    
+    document.querySelectorAll('.background-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.background === 'none');
+    });
+    
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.filter === 'none');
+    });
+    
+    document.getElementById('editor-modal').classList.remove('hidden');
+    applyEditorEffects();
+}
+
+function closeEditor() {
+    AppState.showEditor = false;
+    AppState.editingPet = null;
+    document.getElementById('editor-modal').classList.add('hidden');
+}
+
+function applyEditorEffects() {
+    if (!AppState.editingPet) return;
+    
+    const canvas = document.getElementById('editor-canvas');
+    const ctx = canvas.getContext('2d');
     const img = new Image();
-    img.crossOrigin = "anonymous";
+    
     img.onload = function() {
+        // Configurar tamaño del canvas manteniendo la proporción
         const maxWidth = 600;
         const maxHeight = 400;
         let width = img.width;
@@ -170,471 +534,90 @@ function editPhoto(index) {
         
         canvas.width = width;
         canvas.height = height;
-        ctx.drawImage(img, 0, 0, width, height);
         
-        originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        // Limpiar canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        editor.classList.add('active');
-        currentImage = { index, canvas, ctx, originalImage: img };
-        stickers = [];
-        currentFilter = 'none';
-        currentBackground = 'none';
-        imageWithoutBackground = null;
+        // Aplicar fondo
+        const background = CONFIG.BACKGROUNDS.find(bg => bg.id === AppState.editorState.background);
+        if (background && background.id !== 'none') {
+            ctx.fillStyle = background.color;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
         
-        // Resetear controles
-        brightness = 100;
-        contrast = 100;
-        saturation = 100;
-        document.getElementById('brightnessSlider').value = 100;
-        document.getElementById('contrastSlider').value = 100;
-        document.getElementById('saturationSlider').value = 100;
-        document.getElementById('brightnessValue').textContent = '100%';
-        document.getElementById('contrastValue').textContent = '100%';
-        document.getElementById('saturationValue').textContent = '100%';
+        // Aplicar filtros CSS personalizados
+        let filterString = '';
+        filterString += `brightness(${AppState.editorState.brightness}%) `;
+        filterString += `contrast(${AppState.editorState.contrast}%) `;
+        filterString += `saturate(${AppState.editorState.saturation}%)`;
         
-        document.querySelectorAll('.effect-btn').forEach(btn => {
-            btn.classList.remove('active');
-            if (btn.dataset.effect === 'none') {
-                btn.classList.add('active');
-            }
+        // Aplicar filtros especiales
+        if (AppState.editorState.filter === 'warm') {
+            filterString += ' sepia(30%) hue-rotate(-10deg)';
+        } else if (AppState.editorState.filter === 'vintage') {
+            filterString += ' sepia(50%) contrast(1.1) brightness(1.1)';
+        } else if (AppState.editorState.filter === 'festive') {
+            filterString += ' saturate(1.5) hue-rotate(10deg)';
+        } else if (AppState.editorState.filter === 'golden') {
+            filterString += ' sepia(20%) saturate(1.3) contrast(1.1)';
+        }
+        
+        ctx.filter = filterString;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        
+        // Aplicar stickers
+        AppState.editorState.stickers.forEach(sticker => {
+            ctx.font = '40px Arial';
+            ctx.fillText(sticker.emoji, sticker.x, sticker.y);
         });
-        
-        document.querySelectorAll('.background-btn').forEach(btn => {
-            btn.classList.remove('active');
-            if (btn.dataset.background === 'none') {
-                btn.classList.add('active');
-            }
-        });
-        
-        redrawImage();
     };
-    img.src = pet.image;
-}
-
-function removeBackground() {
-    if (!currentImage) return;
     
-    const processingIndicator = document.getElementById('processingIndicator');
-    processingIndicator.classList.add('active');
-    
-    // Simular procesamiento de remoción de fondo
-    setTimeout(() => {
-        const canvas = currentImage.canvas;
-        const ctx = currentImage.ctx;
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imageData.data;
-        
-        // Algoritmo mejorado para remover fondos
-        for (let i = 0; i < data.length; i += 4) {
-            const r = data[i];
-            const g = data[i + 1];
-            const b = data[i + 2];
-            const brightness = (r + g + b) / 3;
-            const saturation = 1 - (3 * Math.min(r, g, b)) / (r + g + b);
-            
-            // Si el píxel es muy brillante y poco saturado (probable fondo), hacerlo transparente
-            if (brightness > 180 && saturation < 0.3) {
-                data[i + 3] = 0; // Alpha channel
-            }
-        }
-        
-        imageWithoutBackground = new ImageData(data, canvas.width, canvas.height);
-        
-        // Aplicar automáticamente un fondo navideño
-        currentBackground = 'christmas-tree';
-        document.querySelectorAll('.background-btn').forEach(btn => {
-            btn.classList.remove('active');
-            if (btn.dataset.background === 'christmas-tree') {
-                btn.classList.add('active');
-            }
-        });
-        
-        redrawImage();
-        processingIndicator.classList.remove('active');
-        
-        // Mostrar mensaje de éxito
-        alert('¡Magia navideña aplicada! Se ha removido el fondo y aplicado un fondo festivo.');
-    }, 2000);
-}
-
-function applyFilter(filterType) {
-    if (!currentImage) return;
-    
-    currentFilter = filterType;
-    document.querySelectorAll('.effect-btn').forEach(btn => {
-        btn.classList.remove('active');
-        if (btn.dataset.effect === filterType) {
-            btn.classList.add('active');
-        }
-    });
-    
-    redrawImage();
-}
-
-function applyBackground(backgroundType) {
-    if (!currentImage) return;
-    
-    currentBackground = backgroundType;
-    document.querySelectorAll('.background-btn').forEach(btn => {
-        btn.classList.remove('active');
-        if (btn.dataset.background === backgroundType) {
-            btn.classList.add('active');
-        }
-    });
-    
-    redrawImage();
-}
-
-function applyImageAdjustments() {
-    if (!currentImage) return;
-    redrawImage();
-}
-
-function redrawImage() {
-    if (!currentImage) return;
-    
-    const canvas = currentImage.canvas;
-    const ctx = currentImage.ctx;
-    
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // Aplicar fondo si está seleccionado
-    if (currentBackground !== 'none' && backgroundImages[currentBackground]) {
-        const bgImg = backgroundImages[currentBackground];
-        // Dibujar fondo escalado para cubrir todo el canvas
-        ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
-    }
-    
-    // Aplicar imagen principal
-    if (imageWithoutBackground) {
-        ctx.putImageData(imageWithoutBackground, 0, 0);
-    } else {
-        let tempCanvas = document.createElement('canvas');
-        let tempCtx = tempCanvas.getContext('2d');
-        tempCanvas.width = canvas.width;
-        tempCanvas.height = canvas.height;
-        
-        tempCtx.drawImage(currentImage.originalImage, 0, 0, canvas.width, canvas.height);
-        
-        // Aplicar ajustes de imagen
-        if (brightness !== 100 || contrast !== 100 || saturation !== 100) {
-            applyImageFilters(tempCtx, tempCanvas.width, tempCanvas.height);
-        }
-        
-        // Aplicar filtros navideños
-        applyChristmasFilter(tempCtx, tempCanvas.width, tempCanvas.height);
-        
-        ctx.drawImage(tempCanvas, 0, 0);
-    }
-    
-    // Aplicar efecto de nieve si está activo
-    if (currentFilter === 'snow') {
-        drawSnowflakes();
-    }
-    
-    // Dibujar stickers
-    stickers.forEach(sticker => {
-        ctx.font = '40px Arial';
-        ctx.fillText(sticker.emoji, sticker.x, sticker.y);
-    });
-}
-
-function applyImageFilters(ctx, width, height) {
-    const imageData = ctx.getImageData(0, 0, width, height);
-    const data = imageData.data;
-    
-    const brightnessFactor = brightness / 100;
-    const contrastFactor = (contrast / 100) * 255;
-    const saturationFactor = saturation / 100;
-    
-    for (let i = 0; i < data.length; i += 4) {
-        // Brillo
-        data[i] = Math.min(255, data[i] * brightnessFactor);
-        data[i + 1] = Math.min(255, data[i + 1] * brightnessFactor);
-        data[i + 2] = Math.min(255, data[i + 2] * brightnessFactor);
-        
-        // Contraste
-        data[i] = ((data[i] - 128) * contrastFactor / 255) + 128;
-        data[i + 1] = ((data[i + 1] - 128) * contrastFactor / 255) + 128;
-        data[i + 2] = ((data[i + 2] - 128) * contrastFactor / 255) + 128;
-        
-        // Saturación
-        if (saturationFactor !== 1) {
-            const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-            data[i] = gray + (data[i] - gray) * saturationFactor;
-            data[i + 1] = gray + (data[i + 1] - gray) * saturationFactor;
-            data[i + 2] = gray + (data[i + 2] - gray) * saturationFactor;
-        }
-    }
-    
-    ctx.putImageData(imageData, 0, 0);
-}
-
-function applyChristmasFilter(ctx, width, height) {
-    const imageData = ctx.getImageData(0, 0, width, height);
-    const data = imageData.data;
-    
-    switch(currentFilter) {
-        case 'warm':
-            // Filtro cálido navideño (rojos y dorados)
-            for (let i = 0; i < data.length; i += 4) {
-                data[i] = Math.min(255, data[i] * 1.15);     // Más rojo
-                data[i + 1] = Math.min(255, data[i + 1] * 0.95); // Menos verde
-                data[i + 2] = Math.min(255, data[i + 2] * 0.85); // Menos azul
-            }
-            break;
-            
-        case 'cool':
-            // Filtro frío invernal (azules y blancos)
-            for (let i = 0; i < data.length; i += 4) {
-                data[i] = Math.min(255, data[i] * 0.9);     // Menos rojo
-                data[i + 1] = Math.min(255, data[i + 1] * 0.95); // Menos verde
-                data[i + 2] = Math.min(255, data[i + 2] * 1.25); // Más azul
-            }
-            break;
-            
-        case 'vintage':
-            // Filtro vintage sepia
-            for (let i = 0; i < data.length; i += 4) {
-                const r = data[i];
-                const g = data[i + 1];
-                const b = data[i + 2];
-                
-                data[i] = Math.min(255, (r * 0.393) + (g * 0.769) + (b * 0.189));
-                data[i + 1] = Math.min(255, (r * 0.349) + (g * 0.686) + (b * 0.168));
-                data[i + 2] = Math.min(255, (r * 0.272) + (g * 0.534) + (b * 0.131));
-            }
-            break;
-            
-        case 'festive':
-            // Filtro festivo (colores vibrantes)
-            for (let i = 0; i < data.length; i += 4) {
-                data[i] = Math.min(255, data[i] * 1.25);     // Más rojo
-                data[i + 1] = Math.min(255, data[i + 1] * 1.15); // Más verde
-                data[i + 2] = Math.min(255, data[i + 2] * 0.9); // Menos azul
-            }
-            break;
-            
-        case 'golden':
-            // Filtro dorado navideño
-            for (let i = 0; i < data.length; i += 4) {
-                data[i] = Math.min(255, data[i] * 1.1);     // Más rojo
-                data[i + 1] = Math.min(255, data[i + 1] * 1.05); // Más verde
-                data[i + 2] = Math.min(255, data[i + 2] * 0.8); // Menos azul
-            }
-            break;
-            
-        case 'candy':
-            // Filtro caramelo (colores dulces)
-            for (let i = 0; i < data.length; i += 4) {
-                data[i] = Math.min(255, data[i] * 1.2);     // Más rojo
-                data[i + 1] = Math.min(255, data[i + 1] * 1.1); // Más verde
-                data[i + 2] = Math.min(255, data[i + 2] * 1.3); // Más azul
-            }
-            break;
-    }
-    
-    ctx.putImageData(imageData, 0, 0);
-}
-
-function drawSnowflakes() {
-    const snowflakeSymbols = ['❄', '❅', '❆'];
-    const canvas = currentImage.canvas;
-    const ctx = currentImage.ctx;
-    
-    for (let i = 0; i < 25; i++) {
-        const x = Math.random() * canvas.width;
-        const y = Math.random() * canvas.height;
-        const symbol = snowflakeSymbols[Math.floor(Math.random() * snowflakeSymbols.length)];
-        const size = Math.random() * 20 + 10;
-        const opacity = Math.random() * 0.6 + 0.4;
-        
-        ctx.font = `${size}px Arial`;
-        ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
-        ctx.fillText(symbol, x, y);
-    }
-}
-
-function saveEditedPhoto() {
-    if (!currentImage) return;
-    
-    const dataURL = currentImage.canvas.toDataURL('image/png');
-    pets[currentImage.index].editedImage = dataURL;
-    
-    savePets();
-    renderPets();
-    
-    document.getElementById('photoEditor').classList.remove('active');
-    currentImage = null;
-    stickers = [];
-    currentFilter = 'none';
-    currentBackground = 'none';
-    imageWithoutBackground = null;
-    
-    alert('¡Foto editada guardada exitosamente! 🎄');
-}
-
-function cancelEdit() {
-    document.getElementById('photoEditor').classList.remove('active');
-    currentImage = null;
-    stickers = [];
-    currentFilter = 'none';
-    currentBackground = 'none';
-    imageWithoutBackground = null;
+    img.src = AppState.editingPet.image;
 }
 
 function addSticker(emoji) {
-    if (!currentImage) return;
-    
-    const canvas = currentImage.canvas;
-    const x = Math.random() * (canvas.width - 40);
-    const y = Math.random() * (canvas.height - 40);
-    
-    stickers.push({ emoji, x, y });
-    redrawImage();
+    AppState.editorState.stickers.push({
+        emoji,
+        x: Math.random() * 300,
+        y: Math.random() * 200
+    });
+    applyEditorEffects();
 }
 
-// Event Listeners
-document.getElementById('petForm').addEventListener('submit', function(e) {
-    e.preventDefault();
+function applyEdits() {
+    if (!AppState.editingPet) return;
     
-    if (pets.length >= 4) {
-        document.getElementById('limitMessage').classList.add('show');
-        setTimeout(() => {
-            document.getElementById('limitMessage').classList.remove('show');
-        }, 5000);
-        return;
-    }
+    const canvas = document.getElementById('editor-canvas');
+    const editedImage = canvas.toDataURL('image/png');
     
-    const imageFile = document.getElementById('petImage').files[0];
-    let imageDataURL = null;
-    
-    if (imageFile) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            imageDataURL = e.target.result;
-            
-            const newPet = {
-                name: document.getElementById('petName').value,
-                type: document.getElementById('petType').value,
-                age: document.getElementById('petAge').value,
-                description: document.getElementById('petDescription').value,
-                image: imageDataURL,
-                votes: 0,
-                editedImage: null
-            };
-            
-            pets.push(newPet);
-            savePets();
-            renderPets();
-            document.getElementById('petForm').reset();
-            document.querySelector('.file-input-label span').textContent = 'Sube una foto de tu mascota';
-        };
-        reader.readAsDataURL(imageFile);
-    } else {
-        const newPet = {
-            name: document.getElementById('petName').value,
-            type: document.getElementById('petType').value,
-            age: document.getElementById('petAge').value,
-            description: document.getElementById('petDescription').value,
-            votes: 0,
-            editedImage: null
-        };
-        
-        pets.push(newPet);
-        savePets();
-        renderPets();
-        document.getElementById('petForm').reset();
-    }
-});
-
-document.getElementById('petImage').addEventListener('change', function(e) {
-    const fileName = e.target.files[0]?.name || 'Sube una foto de tu mascota';
-    document.querySelector('.file-input-label span').textContent = fileName.length > 20 ? 
-        fileName.substring(0, 20) + '...' : fileName;
-});
-
-document.getElementById('saveEditedPhoto').addEventListener('click', saveEditedPhoto);
-document.getElementById('cancelEdit').addEventListener('click', cancelEdit);
-document.getElementById('removeBackgroundBtn').addEventListener('click', removeBackground);
-
-document.querySelectorAll('.sticker').forEach(sticker => {
-    sticker.addEventListener('click', function() {
-        addSticker(this.getAttribute('data-emoji'));
-    });
-});
-
-document.querySelectorAll('.effect-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
-        applyFilter(this.dataset.effect);
-    });
-});
-
-document.querySelectorAll('.background-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
-        applyBackground(this.dataset.background);
-    });
-});
-
-// Sliders para ajustes de imagen
-document.getElementById('brightnessSlider').addEventListener('input', function() {
-    brightness = this.value;
-    document.getElementById('brightnessValue').textContent = brightness + '%';
-    applyImageAdjustments();
-});
-
-document.getElementById('contrastSlider').addEventListener('input', function() {
-    contrast = this.value;
-    document.getElementById('contrastValue').textContent = contrast + '%';
-    applyImageAdjustments();
-});
-
-document.getElementById('saturationSlider').addEventListener('input', function() {
-    saturation = this.value;
-    document.getElementById('saturationValue').textContent = saturation + '%';
-    applyImageAdjustments();
-});
-
-function updateCountdown() {
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    let christmasDate = new Date(currentYear, 11, 25);
-    
-    if (now > christmasDate) { 
-        christmasDate = new Date(currentYear + 1, 11, 25); 
-    }
-    
-    const diff = christmasDate - now;
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-    
-    document.getElementById('countdown').innerHTML = 
-        `🎅 ¡Faltan ${days} días, ${hours} horas, ${minutes} minutos y ${seconds} segundos para Navidad! 🎄`;
-}
-
-function createSnowflakes() {
-    const snowflakesContainer = document.getElementById('snowflakes'); 
-    const snowflakeSymbols = ['❄', '❅', '❆'];
-    
-    for (let i = 0; i < 50; i++) {
-        const snowflake = document.createElement('div'); 
-        snowflake.className = 'snowflake';
-        snowflake.textContent = snowflakeSymbols[Math.floor(Math.random() * snowflakeSymbols.length)];
-        snowflake.style.left = Math.random() * 100 + '%'; 
-        snowflake.style.animationDuration = (Math.random() * 3 + 2) + 's';
-        snowflake.style.animationDelay = Math.random() * 5 + 's'; 
-        snowflake.style.fontSize = (Math.random() * 10 + 10) + 'px';
-        snowflake.style.opacity = Math.random() * 0.6 + 0.4;
-        snowflakesContainer.appendChild(snowflake);
-    }
-}
-
-// Inicialización
-document.addEventListener('DOMContentLoaded', () => {
-    updateCountdown();
-    setInterval(updateCountdown, 1000);
-    createSnowflakes();
+    AppState.editingPet.editedImage = editedImage;
+    savePets();
     renderPets();
-});
+    closeEditor();
+    showSuccessMessage('¡Edición guardada exitosamente! ✨');
+}
+
+// Función para cambiar tema
+function toggleTheme() {
+    const themeToggle = document.getElementById('theme-toggle');
+    
+    if (AppState.currentTheme === 'christmas') {
+        // Cambiar a tema jurásico
+        document.body.style.background = 'linear-gradient(135deg, var(--jurassic-green), var(--jurassic-light))';
+        themeToggle.textContent = '🦕';
+        AppState.currentTheme = 'jurassic';
+    } else {
+        // Cambiar a tema navideño
+        document.body.style.background = 'linear-gradient(135deg, var(--primary-red), var(--secondary-red), var(--dark-red))';
+        themeToggle.textContent = '🎄';
+        AppState.currentTheme = 'christmas';
+    }
+}
+
+// Hacer funciones disponibles globalmente para los eventos onclick en HTML
+window.deletePet = deletePet;
+window.handleVote = handleVote;
+window.handleSelect = handleSelect;
+window.openEditor = openEditor;
+window.downloadImage = downloadImage;
+window.shareImage = shareImage;
