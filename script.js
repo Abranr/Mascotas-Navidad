@@ -1,5 +1,6 @@
 // Configuración
 const CONFIG = {
+    STORAGE_KEY: 'navidad-magica-images',
     BACKGROUNDS: [
         { id: 'none', name: 'Sin fondo', color: 'linear-gradient(135deg, #f5f5f5, #e5e5e5)' },
         { id: 'red', name: 'Rojo Navideño', color: 'linear-gradient(135deg, #8B0000, #c41e3a)' },
@@ -34,7 +35,9 @@ const AppState = {
         saturation: 100,
         stickers: []
     },
-    currentTheme: 'christmas'
+    currentTheme: 'christmas',
+    currentTab: 'editor',
+    editingImageId: null
 };
 
 // Inicialización cuando el DOM está listo
@@ -46,6 +49,7 @@ function initializeApp() {
     createSnowEffect();
     initializeEventListeners();
     initializeEditor();
+    loadGallery();
 }
 
 // Efecto de nieve mejorado
@@ -69,6 +73,11 @@ function createSnowEffect() {
 
 // Event listeners
 function initializeEventListeners() {
+    // Navegación entre pestañas
+    document.getElementById('editor-tab').addEventListener('click', () => switchTab('editor'));
+    document.getElementById('gallery-tab').addEventListener('click', () => switchTab('gallery'));
+    document.getElementById('view-gallery').addEventListener('click', () => switchTab('gallery'));
+    
     // Carga de imagen
     document.getElementById('image-input').addEventListener('change', handleImageUpload);
     document.getElementById('upload-area').addEventListener('click', () => {
@@ -82,11 +91,29 @@ function initializeEventListeners() {
     uploadArea.addEventListener('drop', handleDrop);
     
     // Botones de acción
-    document.getElementById('save-image').addEventListener('click', saveImage);
+    document.getElementById('save-image').addEventListener('click', saveImageToGallery);
     document.getElementById('reset-editor').addEventListener('click', resetEditor);
     
     // Cambio de tema
     document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+}
+
+// Cambiar entre pestañas
+function switchTab(tab) {
+    AppState.currentTab = tab;
+    
+    // Actualizar navegación
+    document.getElementById('editor-tab').classList.toggle('active', tab === 'editor');
+    document.getElementById('gallery-tab').classList.toggle('active', tab === 'gallery');
+    
+    // Mostrar/ocultar contenido
+    document.getElementById('editor-content').style.display = tab === 'editor' ? 'grid' : 'none';
+    document.getElementById('gallery-content').style.display = tab === 'gallery' ? 'block' : 'none';
+    
+    // Recargar galería si es necesario
+    if (tab === 'gallery') {
+        loadGallery();
+    }
 }
 
 // Inicializar controles del editor
@@ -209,9 +236,10 @@ function handleDrop(e) {
     }
 }
 
-function loadImageToEditor(imageData) {
+function loadImageToEditor(imageData, imageId = null) {
     AppState.originalImage = imageData;
     AppState.currentImage = imageData;
+    AppState.editingImageId = imageId;
     
     // Mostrar vista previa
     const preview = document.getElementById('image-preview');
@@ -231,6 +259,7 @@ function loadImageToEditor(imageData) {
 function removeImage() {
     AppState.originalImage = null;
     AppState.currentImage = null;
+    AppState.editingImageId = null;
     
     // Ocultar vista previa
     document.getElementById('image-preview').style.display = 'none';
@@ -373,18 +402,151 @@ function showSuccessMessage(msg) {
     }, 3000);
 }
 
-function saveImage() {
+// Guardar imagen en localStorage
+function saveImageToGallery() {
     if (!AppState.originalImage) {
         showSuccessMessage('Primero carga una imagen para guardar');
         return;
     }
     
     const canvas = document.getElementById('editor-canvas');
-    const link = document.createElement('a');
-    link.download = 'imagen-navidad-editada.png';
-    link.href = canvas.toDataURL('image/png');
-    link.click();
-    showSuccessMessage('¡Imagen guardada exitosamente! 📥');
+    const editedImage = canvas.toDataURL('image/png');
+    
+    // Obtener imágenes existentes
+    const savedImages = getSavedImages();
+    
+    // Crear objeto de imagen
+    const imageData = {
+        id: AppState.editingImageId || Date.now().toString(),
+        original: AppState.originalImage,
+        edited: editedImage,
+        name: `Imagen Navideña ${new Date().toLocaleDateString()}`,
+        date: new Date().toISOString(),
+        editorState: {...AppState.editorState}
+    };
+    
+    // Actualizar o agregar imagen
+    if (AppState.editingImageId) {
+        // Actualizar imagen existente
+        const index = savedImages.findIndex(img => img.id === AppState.editingImageId);
+        if (index !== -1) {
+            savedImages[index] = imageData;
+        }
+    } else {
+        // Agregar nueva imagen
+        savedImages.unshift(imageData);
+    }
+    
+    // Guardar en localStorage
+    localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(savedImages));
+    
+    // Resetear editor
+    resetEditor();
+    
+    // Mostrar mensaje de éxito
+    showSuccessMessage('¡Imagen guardada en la galería! 📥');
+    
+    // Recargar galería si estamos en esa pestaña
+    if (AppState.currentTab === 'gallery') {
+        loadGallery();
+    }
+}
+
+// Obtener imágenes guardadas
+function getSavedImages() {
+    try {
+        const saved = localStorage.getItem(CONFIG.STORAGE_KEY);
+        return saved ? JSON.parse(saved) : [];
+    } catch (error) {
+        console.error('Error al cargar imágenes:', error);
+        return [];
+    }
+}
+
+// Cargar galería
+function loadGallery() {
+    const galleryContainer = document.getElementById('gallery-container');
+    const savedImages = getSavedImages();
+    
+    if (savedImages.length === 0) {
+        galleryContainer.innerHTML = `
+            <div class="gallery-empty">
+                <div class="gallery-empty-icon">🖼️</div>
+                <h3>No hay imágenes guardadas</h3>
+                <p>Usa el editor para crear y guardar tus imágenes navideñas</p>
+            </div>
+        `;
+        return;
+    }
+    
+    galleryContainer.innerHTML = `
+        <div class="gallery-grid">
+            ${savedImages.map(image => `
+                <div class="gallery-item">
+                    <img src="${image.edited}" alt="${image.name}" class="gallery-image">
+                    <div class="gallery-info">
+                        <div class="gallery-name">${image.name}</div>
+                        <div class="gallery-date">${new Date(image.date).toLocaleDateString()}</div>
+                        <div class="gallery-actions">
+                            <button class="gallery-action-btn edit-btn" onclick="editImage('${image.id}')">
+                                <i class="fas fa-edit"></i> Editar
+                            </button>
+                            <button class="gallery-action-btn delete-btn" onclick="deleteImage('${image.id}')">
+                                <i class="fas fa-trash"></i> Eliminar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+// Editar imagen desde la galería
+function editImage(imageId) {
+    const savedImages = getSavedImages();
+    const image = savedImages.find(img => img.id === imageId);
+    
+    if (image) {
+        // Cargar imagen en el editor
+        loadImageToEditor(image.original, image.id);
+        
+        // Restaurar estado del editor
+        AppState.editorState = {...image.editorState};
+        
+        // Actualizar controles UI
+        document.getElementById('brightness').value = AppState.editorState.brightness;
+        document.getElementById('contrast').value = AppState.editorState.contrast;
+        document.getElementById('saturation').value = AppState.editorState.saturation;
+        document.getElementById('brightness-value').textContent = `${AppState.editorState.brightness}%`;
+        document.getElementById('contrast-value').textContent = `${AppState.editorState.contrast}%`;
+        document.getElementById('saturation-value').textContent = `${AppState.editorState.saturation}%`;
+        
+        document.querySelectorAll('.background-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.background === AppState.editorState.background);
+        });
+        
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.filter === AppState.editorState.filter);
+        });
+        
+        // Cambiar a pestaña de editor
+        switchTab('editor');
+        
+        showSuccessMessage('Imagen cargada para editar ✏️');
+    }
+}
+
+// Eliminar imagen de la galería
+function deleteImage(imageId) {
+    if (confirm('¿Estás seguro de que quieres eliminar esta imagen?')) {
+        const savedImages = getSavedImages();
+        const filteredImages = savedImages.filter(img => img.id !== imageId);
+        
+        localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(filteredImages));
+        loadGallery();
+        showSuccessMessage('Imagen eliminada 🗑️');
+    }
 }
 
 function resetEditor() {
@@ -437,3 +599,7 @@ function toggleTheme() {
         AppState.currentTheme = 'christmas';
     }
 }
+
+// Hacer funciones disponibles globalmente
+window.editImage = editImage;
+window.deleteImage = deleteImage;
