@@ -1,32 +1,32 @@
 // Configuración
 const CONFIG = {
-    STORAGE_KEY: 'navidad-magica-images',
+    STORAGE_KEY: 'navidad-jurasica-pets',
+    MAX_IMAGE_SIZE: 5 * 1024 * 1024, // 5MB
+    IMAGE_QUALITY: 0.8, // Calidad de compresión
     BACKGROUNDS: [
-        { id: 'none', name: 'Sin fondo', color: 'linear-gradient(135deg, #f5f5f5, #e5e5e5)' },
-        { id: 'red', name: 'Rojo Navideño', color: 'linear-gradient(135deg, #8B0000, #c41e3a)' },
-        { id: 'green', name: 'Verde Pino', color: 'linear-gradient(135deg, #0a5d0a, #064706)' },
-        { id: 'gold', name: 'Dorado Festivo', color: 'linear-gradient(135deg, #b8860b, #d4af37)' },
-        { id: 'snow', name: 'Nieve', color: 'linear-gradient(135deg, #e0f7ff, #ffffff)' },
-        { id: 'night', name: 'Noche Estrellada', color: 'linear-gradient(135deg, #0a1128, #1e3a5f)' },
-        { id: 'candy', name: 'Dulces', color: 'linear-gradient(135deg, #ff6b6b, #ffa8a8)' },
-        { id: 'blue', name: 'Azul Hielo', color: 'linear-gradient(135deg, #4facfe, #00f2fe)' }
+        { id: 'none', name: 'Sin fondo', colors: ['#f5f5f5', '#e5e5e5'] },
+        { id: 'red', name: 'Rojo Navideño', colors: ['#8B0000', '#c41e3a'] },
+        { id: 'green', name: 'Verde Pino', colors: ['#0a5d0a', '#064706'] },
+        { id: 'gold', name: 'Dorado Festivo', colors: ['#b8860b', '#d4af37'] },
+        { id: 'snow', name: 'Nieve', colors: ['#e0f7ff', '#ffffff'] },
+        { id: 'night', name: 'Noche Estrellada', colors: ['#0a1128', '#1e3a5f'] }
     ],
-    FILTERS: [
-        { id: 'none', name: 'Normal' },
+    FILTERS: [{ id: 'none', name: 'Normal' },
         { id: 'warm', name: 'Cálido' },
         { id: 'vintage', name: 'Vintage' },
-        { id: 'festive', name: 'Festival' },
-        { id: 'golden', name: 'Dorado' },
-        { id: 'cool', name: 'Frío' },
-        { id: 'dramatic', name: 'Dramático' }
+        { id: 'festive', name: 'Festivo' },
+        { id: 'golden', name: 'Dorado' }
     ],
-    STICKERS: ['🎄', '🎅', '🦌', '❄️', '⭐', '🎁', '🔔', '🕯️', '🌟', '🤶', '☃️', '🕊️', '✨', '🎀', '🧦', '🍪']
+    STICKERS: ['🎄', '🎅', '🦌', '❄️', '⭐', '🎁', '🔔', '🕯️', '🌟', '🦕', '🦖', '☃️']
 };
 
 // Estado de la aplicación
 const AppState = {
-    originalImage: null,
-    currentImage: null,
+    pets: [],
+    searchTerm: '',
+    filterType: 'all',
+    sortBy: 'recent',
+    editingPet: null,
     editorState: {
         filter: 'none',
         background: 'none',
@@ -35,24 +35,23 @@ const AppState = {
         saturation: 100,
         stickers: []
     },
-    currentTheme: 'christmas',
-    currentTab: 'editor',
-    editingImageId: null
+    currentTheme: 'christmas'
 };
 
-// Inicialización cuando el DOM está listo
+// Inicialización
 document.addEventListener('DOMContentLoaded', function() {
     initializeApp();
 });
 
 function initializeApp() {
     createSnowEffect();
+    initializeCountdown();
     initializeEventListeners();
+    loadPets();
     initializeEditor();
-    loadGallery();
 }
 
-// Efecto de nieve mejorado
+// Efecto de nieve
 function createSnowEffect() {
     const snowContainer = document.getElementById('snow-container');
     const snowflakesCount = 50;
@@ -71,59 +70,391 @@ function createSnowEffect() {
     }
 }
 
+// Contador de Navidad
+function initializeCountdown() {
+    function updateCountdown() {
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        let christmas = new Date(currentYear, 11, 25);
+        if (now > christmas) christmas = new Date(currentYear + 1, 11, 25);
+        
+        const diff = christmas - now;
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        
+        document.getElementById('countdown').textContent = 
+            `🎅 ${days} días ${hours}h ${minutes}m para Navidad 🎄`;
+    }
+    
+    updateCountdown();
+    setInterval(updateCountdown, 60000);
+}
+
 // Event listeners
 function initializeEventListeners() {
-    // Navegación entre pestañas
-    document.getElementById('editor-tab').addEventListener('click', () => switchTab('editor'));
-    document.getElementById('gallery-tab').addEventListener('click', () => switchTab('gallery'));
-    document.getElementById('view-gallery').addEventListener('click', () => switchTab('gallery'));
+    // Formulario
+    document.getElementById('pet-form').addEventListener('submit', handleAddPet);
     
-    // Carga de imagen
-    document.getElementById('image-input').addEventListener('change', handleImageUpload);
-    document.getElementById('upload-area').addEventListener('click', () => {
-        document.getElementById('image-input').click();
+    // Vista previa de imagen
+    document.getElementById('image-input').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            if (file.size > CONFIG.MAX_IMAGE_SIZE) {
+                showSuccessMessage('La imagen es demasiado grande. Máximo 5MB.');
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const preview = document.getElementById('image-preview');
+                preview.querySelector('img').src = e.target.result;
+                preview.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+        }
     });
-    document.getElementById('remove-image').addEventListener('click', removeImage);
     
-    // Arrastrar y soltar
-    const uploadArea = document.getElementById('upload-area');
-    uploadArea.addEventListener('dragover', handleDragOver);
-    uploadArea.addEventListener('drop', handleDrop);
+    // Filtros
+    document.getElementById('search-input').addEventListener('input', function(e) {
+        AppState.searchTerm = e.target.value;
+        renderPets();
+    });
     
-    // Botones de acción
-    document.getElementById('save-image').addEventListener('click', saveImageToGallery);
-    document.getElementById('reset-editor').addEventListener('click', resetEditor);
+    document.getElementById('type-filter').addEventListener('change', function(e) {
+        AppState.filterType = e.target.value;
+        renderPets();
+    });
     
-    // Cambio de tema
+    document.getElementById('sort-by').addEventListener('change', function(e) {
+        AppState.sortBy = e.target.value;
+        renderPets();
+    });
+    
+    // Editor
+    document.getElementById('save-edits').addEventListener('click', applyEdits);
+    document.getElementById('cancel-edits').addEventListener('click', closeEditor);
+    
+    // Sliders
+    ['brightness', 'contrast', 'saturation'].forEach(adj => {
+        const slider = document.getElementById(adj);
+        const value = document.getElementById(`${adj}-value`);
+        
+        slider.addEventListener('input', function() {
+            value.textContent = `${this.value}%`;
+            AppState.editorState[adj] = Number(this.value);
+            applyEditorEffects();
+        });
+    });
+    
+    // Tema
     document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
 }
 
-// Cambiar entre pestañas
-function switchTab(tab) {
-    AppState.currentTab = tab;
-    
-    // Actualizar navegación
-    document.getElementById('editor-tab').classList.toggle('active', tab === 'editor');
-    document.getElementById('gallery-tab').classList.toggle('active', tab === 'gallery');
-    
-    // Mostrar/ocultar contenido
-    document.getElementById('editor-content').style.display = tab === 'editor' ? 'grid' : 'none';
-    document.getElementById('gallery-content').style.display = tab === 'gallery' ? 'block' : 'none';
-    
-    // Recargar galería si es necesario
-    if (tab === 'gallery') {
-        loadGallery();
+// Compresión de imagen
+function compressImage(dataURL, callback) {
+    const img = new Image();
+    img.onload = function() {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        
+        // Redimensionar si es muy grande
+        const maxDimension = 1200;
+        if (width > maxDimension || height > maxDimension) {
+            if (width > height) {
+                height = (maxDimension / width) * height;
+                width = maxDimension;
+            } else {
+                width = (maxDimension / height) * width;
+                height = maxDimension;
+            }
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        callback(canvas.toDataURL('image/jpeg', CONFIG.IMAGE_QUALITY));
+    };
+    img.src = dataURL;
+}
+
+// Gestión de mascotas
+function loadPets() {
+    try {
+        const storedPets = localStorage.getItem(CONFIG.STORAGE_KEY);
+        if (storedPets) {
+            AppState.pets = JSON.parse(storedPets);
+        }
+    } catch (error) {
+        console.error('Error al cargar mascotas:', error);
+        showSuccessMessage('Error al cargar datos guardados');
+    }
+    renderPets();
+    updateTypeFilter();
+}
+
+function savePets() {
+    try {
+        localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(AppState.pets));
+    } catch (error) {
+        console.error('Error al guardar:', error);
+        showSuccessMessage('Error: Espacio de almacenamiento lleno');
     }
 }
 
-// Inicializar controles del editor
+function handleAddPet(e) {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const file = formData.get('image');
+    
+    if (!formData.get('name') || !formData.get('type') || !formData.get('age') || !formData.get('description')) {
+        showSuccessMessage('Por favor, completa todos los campos obligatorios');
+        return;
+    }
+    
+    const newPet = {
+        id: Date.now().toString(),
+        name: formData.get('name'),
+        type: formData.get('type'),
+        age: formData.get('age'),
+        description: formData.get('description'),
+        image: null,
+        editedImage: null,
+        votes: 0,
+        timestamp: Date.now(),
+        dateAdded: new Date().toLocaleDateString('es-ES')
+    };
+    
+    if (file && file.size > 0) {
+        if (file.size > CONFIG.MAX_IMAGE_SIZE) {
+            showSuccessMessage('La imagen es demasiado grande. Máximo 5MB.');
+            return;
+        }
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            compressImage(e.target.result, function(compressedImage) {
+                newPet.image = compressedImage;
+                addPetToApp(newPet);
+            });
+        };
+        reader.readAsDataURL(file);
+    } else {
+        addPetToApp(newPet);
+    }
+    
+    e.target.reset();
+    document.getElementById('image-preview').style.display = 'none';
+}
+
+function addPetToApp(pet) {
+    AppState.pets.unshift(pet);
+    savePets();
+    renderPets();
+    updateTypeFilter();
+    showSuccessMessage('¡Mascota agregada con éxito! 🦕🎄');
+}
+
+function deletePet(petId) {
+    if (confirm('¿Estás seguro de que quieres eliminar esta mascota?')) {
+        AppState.pets = AppState.pets.filter(pet => pet.id !== petId);
+        savePets();
+        renderPets();
+        updateTypeFilter();
+        showSuccessMessage('Mascota eliminada 🗑️');
+    }
+}
+
+function handleVote(petId) {
+    const pet = AppState.pets.find(p => p.id === petId);
+    if (pet) {
+        pet.votes += 1;
+        savePets();
+        renderPets();
+        showSuccessMessage('¡Voto registrado! ❤️');
+    }
+}
+
+function handleSelect(petName) {
+    showSuccessMessage(`¡${petName} es tu compañero navideño! 🎉🦕`);
+}
+
+// Renderizado
+function renderPets() {
+    const container = document.getElementById('pets-container');
+    const emptyMessage = document.getElementById('empty-message');
+    
+    const filteredPets = getFilteredPets();
+    
+    if (filteredPets.length === 0) {
+        container.innerHTML = '';
+        emptyMessage.classList.remove('hidden');
+        return;
+    }
+    
+    emptyMessage.classList.add('hidden');
+    
+    const maxVotes = Math.max(0, ...AppState.pets.map(p => p.votes));
+    
+    container.innerHTML = filteredPets.map(pet => {
+        const isMostVoted = pet.votes > 0 && pet.votes === maxVotes;
+        const displayImage = pet.editedImage || pet.image;
+        
+        return `
+            <div class="pet-card ${isMostVoted ? 'most-voted' : ''}">
+                ${isMostVoted ? '<div class="most-voted-badge"><i class="fas fa-crown"></i> Más Votada</div>' : ''}
+                
+                <button class="delete-btn" onclick="deletePet('${pet.id}')">
+                    <i class="fas fa-trash"></i>
+                </button>
+                
+                <div class="pet-image">
+                    ${displayImage ? 
+                        `<img src="${displayImage}" alt="${pet.name}">` : 
+                        '<div class="pet-image-placeholder">🦕</div>'
+                    }
+                </div>
+                
+                <div class="pet-info">
+                    <div class="pet-header">
+                        <h3 class="pet-name">${pet.name}</h3>
+                        <span class="pet-type">${pet.type}</span>
+                    </div>
+                    
+                    <div class="pet-details">
+                        <p class="pet-age"><i class="fas fa-birthday-cake"></i> Edad: ${pet.age} años</p>
+                        <p class="pet-description">${pet.description}</p>
+                    </div>
+                    
+                    <div class="pet-stats">
+                        <span class="pet-date">Agregado: ${pet.dateAdded}</span>
+                        <span class="pet-id">ID: ${pet.id.substring(0, 8)}</span>
+                    </div>
+                    
+                    <div class="pet-actions">
+                        <button class="action-btn vote-btn" onclick="handleVote('${pet.id}')">
+                            <i class="fas fa-heart"></i> Votar
+                        </button>
+                        
+                        <div class="votes-count">❤️ ${pet.votes} votos</div>
+                        
+                        <button class="action-btn select-btn" onclick="handleSelect('${pet.name}')">
+                            <i class="fas fa-gift"></i> Elegir Mascota
+                        </button>
+                        
+                        <div class="action-buttons-grid">
+                            ${pet.image ? `
+                                <button class="small-btn edit-btn" onclick="openEditor('${pet.id}')" title="Editar">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                            ` : ''}
+                            ${displayImage ? `
+                                <button class="small-btn download-btn" onclick="downloadImage('${pet.id}')" title="Descargar">
+                                    <i class="fas fa-download"></i>
+                                </button>
+                                <button class="small-btn share-btn" onclick="shareImage('${pet.id}')" title="Compartir">
+                                    <i class="fas fa-share"></i>
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function getFilteredPets() {
+    return AppState.pets
+        .filter(pet => {
+            const matchesSearch = pet.name.toLowerCase().includes(AppState.searchTerm.toLowerCase()) ||
+                                pet.description.toLowerCase().includes(AppState.searchTerm.toLowerCase());
+            const matchesType = AppState.filterType === 'all' || pet.type === AppState.filterType;
+            return matchesSearch && matchesType;
+        })
+        .sort((a, b) => {
+            if (AppState.sortBy === 'votes') return b.votes - a.votes;
+            if (AppState.sortBy === 'name') return a.name.localeCompare(b.name);
+            return b.timestamp - a.timestamp;
+        });
+}
+
+function updateTypeFilter() {
+    const typeFilter = document.getElementById('type-filter');
+    const types = ['all', ...new Set(AppState.pets.map(p => p.type))];
+    
+    typeFilter.innerHTML = types.map(type => 
+        `<option value="${type}">${type === 'all' ? 'Todos los tipos' : type}</option>`
+    ).join('');
+    
+    typeFilter.value = AppState.filterType;
+}
+
+// Utilidades
+function showSuccessMessage(msg) {
+    const successMessage = document.getElementById('success-message');
+    const successText = document.getElementById('success-text');
+    
+    successText.textContent = msg;
+    successMessage.classList.remove('hidden');
+    
+    setTimeout(() => {
+        successMessage.classList.add('hidden');
+    }, 3000);
+}
+
+function downloadImage(petId) {
+    const pet = AppState.pets.find(p => p.id === petId);
+    if (!pet) return;
+    
+    const img = pet.editedImage || pet.image;
+    if (!img) return;
+    
+    const link = document.createElement('a');
+    link.href = img;
+    link.download = `${pet.name}-navidad.png`;
+    link.click();
+    showSuccessMessage('¡Imagen descargada! 📥');
+}
+
+async function shareImage(petId) {
+    const pet = AppState.pets.find(p => p.id === petId);
+    if (!pet) return;
+    
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: `${pet.name} - Navidad Jurásica`,
+                text: pet.description,
+                url: window.location.href
+            });
+        } catch (err) {
+            console.log('Error al compartir:', err);
+        }
+    } else {
+        if (navigator.clipboard) {
+            try {
+                await navigator.clipboard.writeText(`${pet.name} - ${pet.description}`);
+                showSuccessMessage('¡Información copiada! 📋');
+            } catch (err) {
+                showSuccessMessage('Función de compartir no disponible 📱');
+            }
+        } else {
+            showSuccessMessage('Función de compartir no disponible 📱');
+        }
+    }
+}
+
+// Editor
 function initializeEditor() {
     // Fondos
     const backgroundsContainer = document.getElementById('backgrounds-container');
     backgroundsContainer.innerHTML = CONFIG.BACKGROUNDS.map(bg => `
         <button class="background-btn ${bg.id === 'none' ? 'active' : ''}" 
                 data-background="${bg.id}" 
-                style="background: ${bg.color}"
+                style="background: linear-gradient(135deg, ${bg.colors[0]}, ${bg.colors[1]})"
                 title="${bg.name}">
         </button>
     `).join('');
@@ -145,7 +476,7 @@ function initializeEditor() {
         </button>
     `).join('');
     
-    // Event listeners del editor
+    // Event listeners
     document.querySelectorAll('.background-btn').forEach(btn => {
         btn.addEventListener('click', function() {
             document.querySelectorAll('.background-btn').forEach(b => b.classList.remove('active'));
@@ -169,121 +500,57 @@ function initializeEditor() {
             addSticker(this.dataset.sticker);
         });
     });
+}
+
+function openEditor(petId) {
+    const pet = AppState.pets.find(p => p.id === petId);
+    if (!pet || !pet.image) return;
     
-    // Sliders de ajustes
-    ['brightness', 'contrast', 'saturation'].forEach(adj => {
-        const slider = document.getElementById(adj);
-        const value = document.getElementById(`${adj}-value`);
-        
-        slider.addEventListener('input', function() {
-            value.textContent = `${this.value}%`;
-            AppState.editorState[adj] = Number(this.value);
-            applyEditorEffects();
-        });
+    AppState.editingPet = pet;
+    AppState.editorState = {
+        filter: 'none',
+        background: 'none',
+        brightness: 100,
+        contrast: 100,
+        saturation: 100,
+        stickers: []
+    };
+    
+    // Resetear controles
+    document.getElementById('brightness').value = 100;
+    document.getElementById('contrast').value = 100;
+    document.getElementById('saturation').value = 100;
+    document.getElementById('brightness-value').textContent = '100%';
+    document.getElementById('contrast-value').textContent = '100%';
+    document.getElementById('saturation-value').textContent = '100%';
+    
+    document.querySelectorAll('.background-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.background === 'none');
     });
-}
-
-// Manejo de carga de imágenes
-function handleImageUpload(e) {
-    const file = e.target.files[0];
-    if (file) {
-        // Validar tipo de archivo
-        if (!file.type.match('image.*')) {
-            showSuccessMessage('Por favor, selecciona un archivo de imagen válido');
-            return;
-        }
-        
-        // Validar tamaño (10MB máximo)
-        if (file.size > 10 * 1024 * 1024) {
-            showSuccessMessage('La imagen es demasiado grande. Máximo 10MB permitido.');
-            return;
-        }
-        
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            loadImageToEditor(e.target.result);
-        };
-        reader.readAsDataURL(file);
-    }
-}
-
-function handleDragOver(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    e.dataTransfer.dropEffect = 'copy';
-    document.getElementById('upload-area').style.borderColor = '#8B0000';
-    document.getElementById('upload-area').style.background = '#fff0f0';
-}
-
-function handleDrop(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    document.getElementById('upload-area').style.borderColor = '#fbbf24';
-    document.getElementById('upload-area').style.background = '#fff9f9';
     
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-        const file = files[0];
-        if (file.type.match('image.*')) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                loadImageToEditor(e.target.result);
-            };
-            reader.readAsDataURL(file);
-        } else {
-            showSuccessMessage('Por favor, suelta solo archivos de imagen');
-        }
-    }
-}
-
-function loadImageToEditor(imageData, imageId = null) {
-    AppState.originalImage = imageData;
-    AppState.currentImage = imageData;
-    AppState.editingImageId = imageId;
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.filter === 'none');
+    });
     
-    // Mostrar vista previa
-    const preview = document.getElementById('image-preview');
-    preview.querySelector('img').src = imageData;
-    preview.style.display = 'block';
-    
-    // Ocultar placeholder del canvas
-    document.getElementById('canvas-placeholder').classList.add('hidden');
-    document.getElementById('editor-canvas').style.display = 'block';
-    
-    // Aplicar efectos iniciales
+    document.getElementById('editor-modal').classList.remove('hidden');
     applyEditorEffects();
-    
-    showSuccessMessage('¡Imagen cargada exitosamente! 🎄');
 }
 
-function removeImage() {
-    AppState.originalImage = null;
-    AppState.currentImage = null;
-    AppState.editingImageId = null;
-    
-    // Ocultar vista previa
-    document.getElementById('image-preview').style.display = 'none';
-    document.getElementById('image-input').value = '';
-    
-    // Mostrar placeholder del canvas
-    document.getElementById('canvas-placeholder').classList.remove('hidden');
-    document.getElementById('editor-canvas').style.display = 'none';
-    
-    showSuccessMessage('Imagen eliminada');
+function closeEditor() {
+    AppState.editingPet = null;
+    document.getElementById('editor-modal').classList.add('hidden');
 }
 
-// Aplicar efectos del editor
 function applyEditorEffects() {
-    if (!AppState.originalImage) return;
+    if (!AppState.editingPet) return;
     
     const canvas = document.getElementById('editor-canvas');
     const ctx = canvas.getContext('2d');
     const img = new Image();
     
     img.onload = function() {
-        // Configurar tamaño del canvas manteniendo la proporción
         const maxWidth = 600;
-        const maxHeight = 500;
+        const maxHeight = 400;
         let width = img.width;
         let height = img.height;
         
@@ -300,52 +567,24 @@ function applyEditorEffects() {
         canvas.width = width;
         canvas.height = height;
         
-        // Limpiar canvas
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        // Aplicar fondo
+        // Aplicar fondo con degradado
         const background = CONFIG.BACKGROUNDS.find(bg => bg.id === AppState.editorState.background);
         if (background && background.id !== 'none') {
-            // Crear un gradiente o color sólido según el fondo
-            if (background.color.includes('gradient')) {
-                // Para fondos con gradiente, necesitamos crear un patrón
-                const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-                if (background.id === 'red') {
-                    gradient.addColorStop(0, '#8B0000');
-                    gradient.addColorStop(1, '#c41e3a');
-                } else if (background.id === 'green') {
-                    gradient.addColorStop(0, '#0a5d0a');
-                    gradient.addColorStop(1, '#064706');
-                } else if (background.id === 'gold') {
-                    gradient.addColorStop(0, '#b8860b');
-                    gradient.addColorStop(1, '#d4af37');
-                } else if (background.id === 'snow') {
-                    gradient.addColorStop(0, '#e0f7ff');
-                    gradient.addColorStop(1, '#ffffff');
-                } else if (background.id === 'night') {
-                    gradient.addColorStop(0, '#0a1128');
-                    gradient.addColorStop(1, '#1e3a5f');
-                } else if (background.id === 'candy') {
-                    gradient.addColorStop(0, '#ff6b6b');
-                    gradient.addColorStop(1, '#ffa8a8');
-                } else if (background.id === 'blue') {
-                    gradient.addColorStop(0, '#4facfe');
-                    gradient.addColorStop(1, '#00f2fe');
-                }
-                ctx.fillStyle = gradient;
-            } else {
-                ctx.fillStyle = background.color;
-            }
+            const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+            gradient.addColorStop(0, background.colors[0]);
+            gradient.addColorStop(1, background.colors[1]);
+            ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
         
-        // Aplicar filtros CSS personalizados
+        // Aplicar filtros
         let filterString = '';
         filterString += `brightness(${AppState.editorState.brightness}%) `;
         filterString += `contrast(${AppState.editorState.contrast}%) `;
         filterString += `saturate(${AppState.editorState.saturation}%)`;
         
-        // Aplicar filtros especiales
         if (AppState.editorState.filter === 'warm') {
             filterString += ' sepia(30%) hue-rotate(-10deg)';
         } else if (AppState.editorState.filter === 'vintage') {
@@ -354,14 +593,11 @@ function applyEditorEffects() {
             filterString += ' saturate(1.5) hue-rotate(10deg)';
         } else if (AppState.editorState.filter === 'golden') {
             filterString += ' sepia(20%) saturate(1.3) contrast(1.1)';
-        } else if (AppState.editorState.filter === 'cool') {
-            filterString += ' hue-rotate(180deg) saturate(1.2)';
-        } else if (AppState.editorState.filter === 'dramatic') {
-            filterString += ' contrast(1.4) brightness(0.9) saturate(1.3)';
         }
         
         ctx.filter = filterString;
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        ctx.filter = 'none';
         
         // Aplicar stickers
         AppState.editorState.stickers.forEach(sticker => {
@@ -370,236 +606,51 @@ function applyEditorEffects() {
         });
     };
     
-    img.src = AppState.originalImage;
+    img.src = AppState.editingPet.image;
 }
 
 function addSticker(emoji) {
-    if (!AppState.originalImage) {
-        showSuccessMessage('Primero carga una imagen para agregar stickers');
-        return;
-    }
-    
     const canvas = document.getElementById('editor-canvas');
     AppState.editorState.stickers.push({
         emoji,
         x: Math.random() * (canvas.width - 40),
-        y: Math.random() * (canvas.height - 40)
+        y: Math.random() * (canvas.height - 40) + 40
     });
     applyEditorEffects();
     showSuccessMessage(`Sticker ${emoji} agregado!`);
 }
 
-// Funciones de utilidad
-function showSuccessMessage(msg) {
-    const successMessage = document.getElementById('success-message');
-    const successText = document.getElementById('success-text');
-    
-    successText.textContent = msg;
-    successMessage.classList.remove('hidden');
-    
-    setTimeout(() => {
-        successMessage.classList.add('hidden');
-    }, 3000);
-}
-
-// Guardar imagen en localStorage
-function saveImageToGallery() {
-    if (!AppState.originalImage) {
-        showSuccessMessage('Primero carga una imagen para guardar');
-        return;
-    }
+function applyEdits() {
+    if (!AppState.editingPet) return;
     
     const canvas = document.getElementById('editor-canvas');
-    const editedImage = canvas.toDataURL('image/png');
+    const editedImage = canvas.toDataURL('image/jpeg', CONFIG.IMAGE_QUALITY);
     
-    // Obtener imágenes existentes
-    const savedImages = getSavedImages();
-    
-    // Crear objeto de imagen
-    const imageData = {
-        id: AppState.editingImageId || Date.now().toString(),
-        original: AppState.originalImage,
-        edited: editedImage,
-        name: `Imagen Navideña ${new Date().toLocaleDateString()}`,
-        date: new Date().toISOString(),
-        editorState: {...AppState.editorState}
-    };
-    
-    // Actualizar o agregar imagen
-    if (AppState.editingImageId) {
-        // Actualizar imagen existente
-        const index = savedImages.findIndex(img => img.id === AppState.editingImageId);
-        if (index !== -1) {
-            savedImages[index] = imageData;
-        }
-    } else {
-        // Agregar nueva imagen
-        savedImages.unshift(imageData);
-    }
-    
-    // Guardar en localStorage
-    localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(savedImages));
-    
-    // Resetear editor
-    resetEditor();
-    
-    // Mostrar mensaje de éxito
-    showSuccessMessage('¡Imagen guardada en la galería! 📥');
-    
-    // Recargar galería si estamos en esa pestaña
-    if (AppState.currentTab === 'gallery') {
-        loadGallery();
-    }
-}
-
-// Obtener imágenes guardadas
-function getSavedImages() {
-    try {
-        const saved = localStorage.getItem(CONFIG.STORAGE_KEY);
-        return saved ? JSON.parse(saved) : [];
-    } catch (error) {
-        console.error('Error al cargar imágenes:', error);
-        return [];
-    }
-}
-
-// Cargar galería
-function loadGallery() {
-    const galleryContainer = document.getElementById('gallery-container');
-    const savedImages = getSavedImages();
-    
-    if (savedImages.length === 0) {
-        galleryContainer.innerHTML = `
-            <div class="gallery-empty">
-                <div class="gallery-empty-icon">🖼️</div>
-                <h3>No hay imágenes guardadas</h3>
-                <p>Usa el editor para crear y guardar tus imágenes navideñas</p>
-            </div>
-        `;
-        return;
-    }
-    
-    galleryContainer.innerHTML = `
-        <div class="gallery-grid">
-            ${savedImages.map(image => `
-                <div class="gallery-item">
-                    <img src="${image.edited}" alt="${image.name}" class="gallery-image">
-                    <div class="gallery-info">
-                        <div class="gallery-name">${image.name}</div>
-                        <div class="gallery-date">${new Date(image.date).toLocaleDateString()}</div>
-                        <div class="gallery-actions">
-                            <button class="gallery-action-btn edit-btn" onclick="editImage('${image.id}')">
-                                <i class="fas fa-edit"></i> Editar
-                            </button>
-                            <button class="gallery-action-btn delete-btn" onclick="deleteImage('${image.id}')">
-                                <i class="fas fa-trash"></i> Eliminar
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `).join('')}
-        </div>
-    `;
-}
-
-// Editar imagen desde la galería
-function editImage(imageId) {
-    const savedImages = getSavedImages();
-    const image = savedImages.find(img => img.id === imageId);
-    
-    if (image) {
-        // Cargar imagen en el editor
-        loadImageToEditor(image.original, image.id);
-        
-        // Restaurar estado del editor
-        AppState.editorState = {...image.editorState};
-        
-        // Actualizar controles UI
-        document.getElementById('brightness').value = AppState.editorState.brightness;
-        document.getElementById('contrast').value = AppState.editorState.contrast;
-        document.getElementById('saturation').value = AppState.editorState.saturation;
-        document.getElementById('brightness-value').textContent = `${AppState.editorState.brightness}%`;
-        document.getElementById('contrast-value').textContent = `${AppState.editorState.contrast}%`;
-        document.getElementById('saturation-value').textContent = `${AppState.editorState.saturation}%`;
-        
-        document.querySelectorAll('.background-btn').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.background === AppState.editorState.background);
-        });
-        
-        document.querySelectorAll('.filter-btn').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.filter === AppState.editorState.filter);
-        });
-        
-        // Cambiar a pestaña de editor
-        switchTab('editor');
-        
-        showSuccessMessage('Imagen cargada para editar ✏️');
-    }
-}
-
-// Eliminar imagen de la galería
-function deleteImage(imageId) {
-    if (confirm('¿Estás seguro de que quieres eliminar esta imagen?')) {
-        const savedImages = getSavedImages();
-        const filteredImages = savedImages.filter(img => img.id !== imageId);
-        
-        localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(filteredImages));
-        loadGallery();
-        showSuccessMessage('Imagen eliminada 🗑️');
-    }
-}
-
-function resetEditor() {
-    if (!AppState.originalImage) {
-        showSuccessMessage('No hay imagen para reiniciar');
-        return;
-    }
-    
-    AppState.editorState = {
-        filter: 'none',
-        background: 'none',
-        brightness: 100,
-        contrast: 100,
-        saturation: 100,
-        stickers: []
-    };
-    
-    // Resetear controles UI
-    document.getElementById('brightness').value = 100;
-    document.getElementById('contrast').value = 100;
-    document.getElementById('saturation').value = 100;
-    document.getElementById('brightness-value').textContent = '100%';
-    document.getElementById('contrast-value').textContent = '100%';
-    document.getElementById('saturation-value').textContent = '100%';
-    
-    document.querySelectorAll('.background-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.background === 'none');
-    });
-    
-    document.querySelectorAll('.filter-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.filter === 'none');
-    });
-    
-    applyEditorEffects();
-    showSuccessMessage('Editor reiniciado ✨');
+    AppState.editingPet.editedImage = editedImage;
+    savePets();
+    renderPets();
+    closeEditor();
+    showSuccessMessage('¡Edición guardada! ✨');
 }
 
 function toggleTheme() {
     const themeToggle = document.getElementById('theme-toggle');
     
     if (AppState.currentTheme === 'christmas') {
-        // Cambiar a tema azul/hielo
-        document.body.style.background = 'linear-gradient(135deg, #0a5d6b, #4facfe, #00f2fe)';
-        themeToggle.textContent = '❄️';
-        AppState.currentTheme = 'winter';
+        document.body.style.background = 'linear-gradient(135deg, #2d5016, #4a7c2a)';
+        themeToggle.textContent = '🦕';
+        AppState.currentTheme = 'jurassic';
     } else {
-        // Cambiar a tema navideño
-        document.body.style.background = 'linear-gradient(135deg, var(--primary-red), var(--secondary-red), var(--dark-red))';
+        document.body.style.background = 'linear-gradient(135deg, #8B0000, #c41e3a, #7a0000)';
         themeToggle.textContent = '🎄';
         AppState.currentTheme = 'christmas';
     }
 }
 
-// Hacer funciones disponibles globalmente
-window.editImage = editImage;
-window.deleteImage = deleteImage;
+// Funciones globales
+window.deletePet = deletePet;
+window.handleVote = handleVote;
+window.handleSelect = handleSelect;
+window.openEditor = openEditor;
+window.downloadImage = downloadImage;
+window.shareImage = shareImage;
