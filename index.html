@@ -5,10 +5,41 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Navidad Jurásica</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Firebase -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
+    <!-- Firebase SDK version 9 (modular) -->
+    <script type="module">
+        // Import the functions you need from the SDKs you need
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, orderBy, query, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+
+        // Your web app's Firebase configuration - TUS DATOS REALES
+        const firebaseConfig = {
+            apiKey: "AIzaSyASxeLBc8NhR3ahl80pHwm9UWGQ3dX-bs7c",
+            authDomain: "navidadbi.firebaseapp.com",
+            projectId: "navidadbi",
+            storageBucket: "navidadbi.firebasestorage.app",
+            messagingSenderId: "448131843582",
+            appId: "1:448131843582:web:e52b6564e716665c0a6caf"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        
+        // Initialize services
+        const db = getFirestore(app);
+        const storage = getStorage(app);
+        
+        // Make them globally available
+        window.firebaseApp = app;
+        window.db = db;
+        window.storage = storage;
+        window.firebaseFunctions = {
+            collection, addDoc, getDocs, doc, updateDoc, deleteDoc, orderBy, query, serverTimestamp,
+            ref, uploadBytes, getDownloadURL
+        };
+        
+        console.log('✅ Firebase inicializado correctamente');
+    </script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -211,25 +242,6 @@
         </footer>
     </div>
 
-<script type="module">
-  // Import the functions you need from the SDKs you need
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
-  // TODO: Add SDKs for Firebase products that you want to use
-  // https://firebase.google.com/docs/web/setup#available-libraries
-
-  // Your web app's Firebase configuration
-  const firebaseConfig = {
-    apiKey: "AIzaSyASxelBc8NhR3aH8OpHwm0UMGQ3dX-bs7c",
-    authDomain: "navidadbi.firebaseapp.com",
-    projectId: "navidadbi",
-    storageBucket: "navidadbi.firebasestorage.app",
-    messagingSenderId: "448131843582",
-    appId: "1:448131843582:web:e52b6564e716665c0a6caf"
-  };
-
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-</script>
     <script src="script.js"></script>
 </body>
 </html>

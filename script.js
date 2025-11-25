@@ -21,10 +21,6 @@ const CONFIG = {
     STICKERS: ['🎄', '🎅', '🦌', '❄️', '⭐', '🎁', '🔔', '🕯️', '🌟', '🦕', '🦖', '☃️']
 };
 
-// Firebase
-const db = firebase.firestore();
-const storage = firebase.storage();
-
 // Estado de la aplicación
 const AppState = {
     pets: [],
@@ -44,8 +40,29 @@ const AppState = {
     online: navigator.onLine
 };
 
+// Esperar a que Firebase se cargue
+let db, storage, firebaseFunctions;
+
+function waitForFirebase() {
+    return new Promise((resolve) => {
+        const checkFirebase = () => {
+            if (window.db && window.storage && window.firebaseFunctions) {
+                db = window.db;
+                storage = window.storage;
+                firebaseFunctions = window.firebaseFunctions;
+                console.log('✅ Firebase listo para usar');
+                resolve();
+            } else {
+                setTimeout(checkFirebase, 100);
+            }
+        };
+        checkFirebase();
+    });
+}
+
 // Inicialización
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
+    await waitForFirebase();
     initializeApp();
 });
 
@@ -199,7 +216,12 @@ async function loadPets() {
         if (AppState.online) {
             console.log('🔄 Cargando desde Firebase...');
             // Cargar desde Firebase
-            const snapshot = await db.collection('pets').orderBy('timestamp', 'desc').get();
+            const q = firebaseFunctions.query(
+                firebaseFunctions.collection(db, 'pets'), 
+                firebaseFunctions.orderBy('timestamp', 'desc')
+            );
+            const snapshot = await firebaseFunctions.getDocs(q);
+            
             AppState.pets = snapshot.docs.map(doc => {
                 const data = doc.data();
                 return {
@@ -252,12 +274,14 @@ async function syncLocalData() {
             for (const pet of pets) {
                 try {
                     // Verificar si ya existe en Firebase
-                    const doc = await db.collection('pets').doc(pet.id).get();
-                    if (!doc.exists) {
+                    const docRef = firebaseFunctions.doc(db, 'pets', pet.id);
+                    const doc = await firebaseFunctions.getDocs(docRef);
+                    
+                    if (!doc.exists()) {
                         // Subir a Firebase
-                        await db.collection('pets').doc(pet.id).set({
+                        await firebaseFunctions.setDoc(docRef, {
                             ...pet,
-                            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                            timestamp: firebaseFunctions.serverTimestamp()
                         });
                         syncCount++;
                     }
@@ -278,13 +302,11 @@ async function syncLocalData() {
 // Subir imagen a Firebase Storage
 async function uploadImage(file, petId) {
     try {
-        const storageRef = storage.ref();
-        const fileExtension = file.name.split('.').pop();
-        const imageRef = storageRef.child(`pets/${petId}/${Date.now()}.${fileExtension}`);
+        const storageRef = firebaseFunctions.ref(storage, `pets/${petId}/${Date.now()}_${file.name}`);
         
         console.log('🔼 Subiendo imagen a Firebase Storage...');
-        const snapshot = await imageRef.put(file);
-        const downloadURL = await snapshot.ref.getDownloadURL();
+        const snapshot = await firebaseFunctions.uploadBytes(storageRef, file);
+        const downloadURL = await firebaseFunctions.getDownloadURL(snapshot.ref);
         
         console.log('✅ Imagen subida correctamente:', downloadURL);
         return downloadURL;
@@ -390,9 +412,10 @@ async function addPetToApp(pet) {
     try {
         if (AppState.online) {
             // Guardar en Firebase
-            await db.collection('pets').doc(pet.id).set({
+            const docRef = firebaseFunctions.doc(db, 'pets', pet.id);
+            await firebaseFunctions.setDoc(docRef, {
                 ...pet,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                timestamp: firebaseFunctions.serverTimestamp()
             });
             console.log('✅ Mascota guardada en Firebase');
         }
@@ -417,7 +440,8 @@ async function deletePet(petId) {
         try {
             if (AppState.online) {
                 // Eliminar de Firebase
-                await db.collection('pets').doc(petId).delete();
+                const docRef = firebaseFunctions.doc(db, 'pets', petId);
+                await firebaseFunctions.deleteDoc(docRef);
                 console.log('✅ Mascota eliminada de Firebase');
             }
             
@@ -442,7 +466,8 @@ async function handleVote(petId) {
         
         try {
             if (AppState.online) {
-                await db.collection('pets').doc(petId).update({
+                const docRef = firebaseFunctions.doc(db, 'pets', petId);
+                await firebaseFunctions.updateDoc(docRef, {
                     votes: pet.votes
                 });
             }
@@ -627,7 +652,7 @@ async function shareImage(petId) {
     }
 }
 
-// Editor (se mantiene igual)
+// Editor
 function initializeEditor() {
     // Fondos
     const backgroundsContainer = document.getElementById('backgrounds-container');
@@ -811,7 +836,8 @@ async function applyEdits() {
     try {
         if (AppState.online) {
             // Actualizar en Firebase
-            await db.collection('pets').doc(AppState.editingPet.id).update({
+            const docRef = firebaseFunctions.doc(db, 'pets', AppState.editingPet.id);
+            await firebaseFunctions.updateDoc(docRef, {
                 editedImageUrl: editedImage
             });
         }
