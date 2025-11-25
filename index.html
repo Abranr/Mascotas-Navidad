@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Navidad Jurásica</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -14,6 +18,12 @@
     <!-- Mensaje de éxito -->
     <div id="success-message" class="success-message hidden">
         <p id="success-text"></p>
+    </div>
+
+    <!-- Estado de conexión -->
+    <div id="connection-status" class="connection-status hidden">
+        <i class="fas fa-wifi"></i>
+        <span id="connection-text">Conectado</span>
     </div>
 
     <!-- Botón de cambio de tema -->
@@ -201,6 +211,25 @@
         </footer>
     </div>
 
+<script type="module">
+  // Import the functions you need from the SDKs you need
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
+  // TODO: Add SDKs for Firebase products that you want to use
+  // https://firebase.google.com/docs/web/setup#available-libraries
+
+  // Your web app's Firebase configuration
+  const firebaseConfig = {
+    apiKey: "AIzaSyASxelBc8NhR3aH8OpHwm0UMGQ3dX-bs7c",
+    authDomain: "navidadbi.firebaseapp.com",
+    projectId: "navidadbi",
+    storageBucket: "navidadbi.firebasestorage.app",
+    messagingSenderId: "448131843582",
+    appId: "1:448131843582:web:e52b6564e716665c0a6caf"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+</script>
     <script src="script.js"></script>
 </body>
 </html>

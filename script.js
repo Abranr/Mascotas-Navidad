@@ -1,7 +1,7 @@
 // Configuración
 const CONFIG = {
     STORAGE_KEY: 'navidad-jurasica-pets',
-    MAX_IMAGE_SIZE: 5 * 1024 * 1024, // 5MB
+    MAX_IMAGE_SIZE: 5 * 1024 * 1024,
     IMAGE_QUALITY: 0.8,
     BACKGROUNDS: [
         { id: 'none', name: 'Sin fondo', colors: ['#f5f5f5', '#e5e5e5'] },
@@ -21,6 +21,10 @@ const CONFIG = {
     STICKERS: ['🎄', '🎅', '🦌', '❄️', '⭐', '🎁', '🔔', '🕯️', '🌟', '🦕', '🦖', '☃️']
 };
 
+// Firebase
+const db = firebase.firestore();
+const storage = firebase.storage();
+
 // Estado de la aplicación
 const AppState = {
     pets: [],
@@ -36,7 +40,8 @@ const AppState = {
         saturation: 100,
         stickers: []
     },
-    currentTheme: 'christmas'
+    currentTheme: 'christmas',
+    online: navigator.onLine
 };
 
 // Inicialización
@@ -44,12 +49,49 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeApp();
 });
 
-function initializeApp() {
+async function initializeApp() {
     createSnowEffect();
     initializeCountdown();
     initializeEventListeners();
-    loadPets();
     initializeEditor();
+    initializeConnectionListener();
+    await loadPets();
+}
+
+// Manejo de conexión
+function initializeConnectionListener() {
+    const connectionStatus = document.getElementById('connection-status');
+    const connectionText = document.getElementById('connection-text');
+    
+    function updateConnectionStatus() {
+        AppState.online = navigator.onLine;
+        
+        if (AppState.online) {
+            connectionStatus.className = 'connection-status online';
+            connectionText.textContent = 'Conectado';
+            connectionStatus.classList.remove('hidden');
+        } else {
+            connectionStatus.className = 'connection-status offline';
+            connectionText.textContent = 'Sin conexión - Modo local';
+            connectionStatus.classList.remove('hidden');
+        }
+    }
+    
+    // Estado inicial
+    updateConnectionStatus();
+    
+    // Listeners de conexión
+    window.addEventListener('online', async () => {
+        updateConnectionStatus();
+        showSuccessMessage('🔗 Conexión restaurada - Sincronizando...');
+        await syncLocalData();
+        await loadPets();
+    });
+    
+    window.addEventListener('offline', () => {
+        updateConnectionStatus();
+        showSuccessMessage('📴 Sin conexión - Usando datos locales');
+    });
 }
 
 // Efecto de nieve
@@ -151,6 +193,107 @@ function initializeEventListeners() {
     document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
 }
 
+// Gestión de datos - Firebase + LocalStorage
+async function loadPets() {
+    try {
+        if (AppState.online) {
+            console.log('🔄 Cargando desde Firebase...');
+            // Cargar desde Firebase
+            const snapshot = await db.collection('pets').orderBy('timestamp', 'desc').get();
+            AppState.pets = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    ...data,
+                    // Convertir timestamp de Firebase a número
+                    timestamp: data.timestamp?.toDate?.().getTime() || data.timestamp || Date.now()
+                };
+            });
+            
+            console.log('✅ Datos cargados desde Firebase:', AppState.pets.length);
+            
+            // Guardar copia local
+            localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(AppState.pets));
+        } else {
+            // Cargar desde localStorage
+            const storedPets = localStorage.getItem(CONFIG.STORAGE_KEY);
+            if (storedPets) {
+                AppState.pets = JSON.parse(storedPets);
+                console.log('📱 Datos cargados desde localStorage:', AppState.pets.length);
+            } else {
+                AppState.pets = [];
+                console.log('ℹ️ No hay datos locales');
+            }
+        }
+    } catch (error) {
+        console.error('❌ Error al cargar mascotas:', error);
+        // Fallback a localStorage
+        const storedPets = localStorage.getItem(CONFIG.STORAGE_KEY);
+        if (storedPets) {
+            AppState.pets = JSON.parse(storedPets);
+        } else {
+            AppState.pets = [];
+        }
+        showSuccessMessage('⚠️ Error de conexión - Usando datos locales');
+    }
+    
+    renderPets();
+    updateTypeFilter();
+}
+
+// Sincronizar datos locales con Firebase
+async function syncLocalData() {
+    try {
+        const localPets = localStorage.getItem(CONFIG.STORAGE_KEY);
+        if (localPets) {
+            const pets = JSON.parse(localPets);
+            let syncCount = 0;
+            
+            for (const pet of pets) {
+                try {
+                    // Verificar si ya existe en Firebase
+                    const doc = await db.collection('pets').doc(pet.id).get();
+                    if (!doc.exists) {
+                        // Subir a Firebase
+                        await db.collection('pets').doc(pet.id).set({
+                            ...pet,
+                            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        syncCount++;
+                    }
+                } catch (error) {
+                    console.error(`Error sincronizando mascota ${pet.id}:`, error);
+                }
+            }
+            
+            if (syncCount > 0) {
+                console.log(`✅ ${syncCount} mascotas sincronizadas con Firebase`);
+            }
+        }
+    } catch (error) {
+        console.error('❌ Error en sincronización:', error);
+    }
+}
+
+// Subir imagen a Firebase Storage
+async function uploadImage(file, petId) {
+    try {
+        const storageRef = storage.ref();
+        const fileExtension = file.name.split('.').pop();
+        const imageRef = storageRef.child(`pets/${petId}/${Date.now()}.${fileExtension}`);
+        
+        console.log('🔼 Subiendo imagen a Firebase Storage...');
+        const snapshot = await imageRef.put(file);
+        const downloadURL = await snapshot.ref.getDownloadURL();
+        
+        console.log('✅ Imagen subida correctamente:', downloadURL);
+        return downloadURL;
+    } catch (error) {
+        console.error('❌ Error al subir imagen:', error);
+        throw error;
+    }
+}
+
 // Compresión de imagen
 function compressImage(dataURL, callback) {
     const img = new Image();
@@ -159,7 +302,6 @@ function compressImage(dataURL, callback) {
         let width = img.width;
         let height = img.height;
         
-        // Redimensionar si es muy grande
         const maxDimension = 1200;
         if (width > maxDimension || height > maxDimension) {
             if (width > height) {
@@ -182,69 +324,24 @@ function compressImage(dataURL, callback) {
 }
 
 // Gestión de mascotas
-function loadPets() {
-    try {
-        const storedPets = localStorage.getItem(CONFIG.STORAGE_KEY);
-        if (storedPets) {
-            AppState.pets = JSON.parse(storedPets);
-            console.log('Mascotas cargadas:', AppState.pets.length);
-        }
-    } catch (error) {
-        console.error('Error al cargar mascotas:', error);
-        showSuccessMessage('Error al cargar datos guardados');
-        AppState.pets = [];
-    }
-    renderPets();
-    updateTypeFilter();
-}
-
-function savePets() {
-    try {
-        localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(AppState.pets));
-        console.log('Mascotas guardadas:', AppState.pets.length);
-        return true;
-    } catch (error) {
-        console.error('Error al guardar:', error);
-        
-        // Intentar limpiar espacio eliminando mascotas antiguas
-        if (AppState.pets.length > 1) {
-            const removedPet = AppState.pets.pop();
-            console.log('Eliminando mascota antigua para liberar espacio:', removedPet.name);
-            
-            // Intentar guardar nuevamente
-            try {
-                localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(AppState.pets));
-                showSuccessMessage('Se eliminó una mascota antigua para liberar espacio');
-                return true;
-            } catch (error2) {
-                showSuccessMessage('Error: Espacio de almacenamiento lleno');
-                return false;
-            }
-        } else {
-            showSuccessMessage('Error: Espacio de almacenamiento lleno');
-            return false;
-        }
-    }
-}
-
-function handleAddPet(e) {
+async function handleAddPet(e) {
     e.preventDefault();
     const formData = new FormData(e.target);
     const file = formData.get('image');
     
     if (!formData.get('name') || !formData.get('type') || !formData.get('age') || !formData.get('description')) {
-        showSuccessMessage('Por favor, completa todos los campos obligatorios');
+        showSuccessMessage('❌ Por favor, completa todos los campos obligatorios');
         return;
     }
     
     const newPet = {
-        id: Date.now().toString(),
+        id: 'pet_' + Date.now(),
         name: formData.get('name'),
         type: formData.get('type'),
         age: formData.get('age'),
         description: formData.get('description'),
-        image: null,
-        editedImage: null,
+        imageUrl: null,
+        editedImageUrl: null,
         votes: 0,
         timestamp: Date.now(),
         dateAdded: new Date().toLocaleDateString('es-ES')
@@ -252,59 +349,116 @@ function handleAddPet(e) {
     
     if (file && file.size > 0) {
         if (file.size > CONFIG.MAX_IMAGE_SIZE) {
-            showSuccessMessage('La imagen es demasiado grande. Máximo 5MB.');
+            showSuccessMessage('❌ La imagen es demasiado grande. Máximo 5MB.');
             return;
         }
         
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            compressImage(e.target.result, function(compressedImage) {
-                newPet.image = compressedImage;
-                addPetToApp(newPet);
-            });
-        };
-        reader.readAsDataURL(file);
-    } else {
-        addPetToApp(newPet);
+        try {
+            if (AppState.online) {
+                // Subir a Firebase Storage
+                newPet.imageUrl = await uploadImage(file, newPet.id);
+            } else {
+                // Comprimir y guardar localmente
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    compressImage(e.target.result, function(compressedImage) {
+                        newPet.imageUrl = compressedImage;
+                        addPetToApp(newPet);
+                    });
+                };
+                reader.readAsDataURL(file);
+                return;
+            }
+        } catch (error) {
+            console.error('Error al procesar imagen:', error);
+            showSuccessMessage('❌ Error al subir la imagen');
+            return;
+        }
     }
     
+    await addPetToApp(newPet);
     e.target.reset();
     document.getElementById('image-preview').style.display = 'none';
 }
 
-function addPetToApp(pet) {
+async function addPetToApp(pet) {
+    // Agregar localmente primero para respuesta inmediata
     AppState.pets.unshift(pet);
-    if (savePets()) {
+    renderPets();
+    updateTypeFilter();
+    
+    try {
+        if (AppState.online) {
+            // Guardar en Firebase
+            await db.collection('pets').doc(pet.id).set({
+                ...pet,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            console.log('✅ Mascota guardada en Firebase');
+        }
+        
+        // Guardar localmente siempre
+        localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(AppState.pets));
+        
+        showSuccessMessage('✅ ¡Mascota agregada con éxito! 🦕🎄');
+    } catch (error) {
+        console.error('❌ Error al guardar:', error);
+        // Revertir cambios locales
+        AppState.pets = AppState.pets.filter(p => p.id !== pet.id);
         renderPets();
-        updateTypeFilter();
-        showSuccessMessage('¡Mascota agregada con éxito! 🦕🎄');
+        showSuccessMessage('❌ Error al guardar la mascota');
     }
 }
 
-function deletePet(petId) {
+async function deletePet(petId) {
     if (confirm('¿Estás seguro de que quieres eliminar esta mascota?')) {
-        AppState.pets = AppState.pets.filter(pet => pet.id !== petId);
-        if (savePets()) {
+        const petToDelete = AppState.pets.find(pet => pet.id === petId);
+        
+        try {
+            if (AppState.online) {
+                // Eliminar de Firebase
+                await db.collection('pets').doc(petId).delete();
+                console.log('✅ Mascota eliminada de Firebase');
+            }
+            
+            // Eliminar localmente
+            AppState.pets = AppState.pets.filter(pet => pet.id !== petId);
+            localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(AppState.pets));
+            
             renderPets();
             updateTypeFilter();
-            showSuccessMessage('Mascota eliminada 🗑️');
+            showSuccessMessage('🗑️ Mascota eliminada');
+        } catch (error) {
+            console.error('❌ Error al eliminar:', error);
+            showSuccessMessage('❌ Error al eliminar la mascota');
         }
     }
 }
 
-function handleVote(petId) {
+async function handleVote(petId) {
     const pet = AppState.pets.find(p => p.id === petId);
     if (pet) {
-        pet.votes += 1;
-        if (savePets()) {
+        pet.votes = (pet.votes || 0) + 1;
+        
+        try {
+            if (AppState.online) {
+                await db.collection('pets').doc(petId).update({
+                    votes: pet.votes
+                });
+            }
+            
+            localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(AppState.pets));
             renderPets();
-            showSuccessMessage('¡Voto registrado! ❤️');
+            showSuccessMessage('❤️ ¡Voto registrado!');
+        } catch (error) {
+            console.error('❌ Error al votar:', error);
+            showSuccessMessage('❌ Error al registrar el voto');
         }
     }
 }
 
 function handleSelect(petName) {
-    showSuccessMessage(`¡${petName} es tu compañero navideño! 🎉🦕`);
+    showSuccessMessage(`🎉 ¡${petName} es tu compañero navideño! 🦕`);
 }
 
 // Renderizado
@@ -322,11 +476,11 @@ function renderPets() {
     
     emptyMessage.classList.add('hidden');
     
-    const maxVotes = Math.max(0, ...AppState.pets.map(p => p.votes));
+    const maxVotes = Math.max(0, ...AppState.pets.map(p => p.votes || 0));
     
     container.innerHTML = filteredPets.map(pet => {
         const isMostVoted = pet.votes > 0 && pet.votes === maxVotes;
-        const displayImage = pet.editedImage || pet.image;
+        const displayImage = pet.editedImageUrl || pet.imageUrl;
         
         return `
             <div class="pet-card ${isMostVoted ? 'most-voted' : ''}">
@@ -338,8 +492,7 @@ function renderPets() {
                 
                 <div class="pet-image">
                     ${displayImage ? 
-                        `<img src="${displayImage}" alt="${pet.name}" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-                         <div class="pet-image-placeholder" style="display:none;">🦕</div>` : 
+                        `<img src="${displayImage}" alt="${pet.name}" loading="lazy">` : 
                         '<div class="pet-image-placeholder">🦕</div>'
                     }
                 </div>
@@ -365,14 +518,14 @@ function renderPets() {
                             <i class="fas fa-heart"></i> Votar
                         </button>
                         
-                        <div class="votes-count">❤️ ${pet.votes} votos</div>
+                        <div class="votes-count">❤️ ${pet.votes || 0} votos</div>
                         
                         <button class="action-btn select-btn" onclick="handleSelect('${pet.name}')">
                             <i class="fas fa-gift"></i> Elegir Mascota
                         </button>
                         
                         <div class="action-buttons-grid">
-                            ${pet.image ? `
+                            ${pet.imageUrl ? `
                                 <button class="small-btn edit-btn" onclick="openEditor('${pet.id}')" title="Editar">
                                     <i class="fas fa-edit"></i>
                                 </button>
@@ -429,21 +582,21 @@ function showSuccessMessage(msg) {
     
     setTimeout(() => {
         successMessage.classList.add('hidden');
-    }, 3000);
+    }, 4000);
 }
 
 function downloadImage(petId) {
     const pet = AppState.pets.find(p => p.id === petId);
     if (!pet) return;
     
-    const img = pet.editedImage || pet.image;
+    const img = pet.editedImageUrl || pet.imageUrl;
     if (!img) return;
     
     const link = document.createElement('a');
     link.href = img;
     link.download = `${pet.name}-navidad.png`;
     link.click();
-    showSuccessMessage('¡Imagen descargada! 📥');
+    showSuccessMessage('📥 ¡Imagen descargada!');
 }
 
 async function shareImage(petId) {
@@ -474,7 +627,7 @@ async function shareImage(petId) {
     }
 }
 
-// Editor
+// Editor (se mantiene igual)
 function initializeEditor() {
     // Fondos
     const backgroundsContainer = document.getElementById('backgrounds-container');
@@ -531,7 +684,7 @@ function initializeEditor() {
 
 function openEditor(petId) {
     const pet = AppState.pets.find(p => p.id === petId);
-    if (!pet || !pet.image) return;
+    if (!pet || !pet.imageUrl) return;
     
     AppState.editingPet = pet;
     AppState.editorState = {
@@ -633,7 +786,7 @@ function applyEditorEffects() {
         });
     };
     
-    img.src = AppState.editingPet.image;
+    img.src = AppState.editingPet.imageUrl;
 }
 
 function addSticker(emoji) {
@@ -647,17 +800,31 @@ function addSticker(emoji) {
     showSuccessMessage(`Sticker ${emoji} agregado!`);
 }
 
-function applyEdits() {
+async function applyEdits() {
     if (!AppState.editingPet) return;
     
     const canvas = document.getElementById('editor-canvas');
     const editedImage = canvas.toDataURL('image/jpeg', CONFIG.IMAGE_QUALITY);
     
-    AppState.editingPet.editedImage = editedImage;
-    if (savePets()) {
+    AppState.editingPet.editedImageUrl = editedImage;
+    
+    try {
+        if (AppState.online) {
+            // Actualizar en Firebase
+            await db.collection('pets').doc(AppState.editingPet.id).update({
+                editedImageUrl: editedImage
+            });
+        }
+        
+        // Guardar localmente
+        localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(AppState.pets));
+        
         renderPets();
         closeEditor();
-        showSuccessMessage('¡Edición guardada! ✨');
+        showSuccessMessage('✨ ¡Edición guardada!');
+    } catch (error) {
+        console.error('Error al guardar edición:', error);
+        showSuccessMessage('❌ Error al guardar la edición');
     }
 }
 
