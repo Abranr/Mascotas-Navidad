@@ -2,7 +2,7 @@
 const CONFIG = {
     STORAGE_KEY: 'navidad-jurasica-pets',
     MAX_IMAGE_SIZE: 5 * 1024 * 1024, // 5MB
-    IMAGE_QUALITY: 0.8, // Calidad de compresión
+    IMAGE_QUALITY: 0.8,
     BACKGROUNDS: [
         { id: 'none', name: 'Sin fondo', colors: ['#f5f5f5', '#e5e5e5'] },
         { id: 'red', name: 'Rojo Navideño', colors: ['#8B0000', '#c41e3a'] },
@@ -11,7 +11,8 @@ const CONFIG = {
         { id: 'snow', name: 'Nieve', colors: ['#e0f7ff', '#ffffff'] },
         { id: 'night', name: 'Noche Estrellada', colors: ['#0a1128', '#1e3a5f'] }
     ],
-    FILTERS: [{ id: 'none', name: 'Normal' },
+    FILTERS: [
+        { id: 'none', name: 'Normal' },
         { id: 'warm', name: 'Cálido' },
         { id: 'vintage', name: 'Vintage' },
         { id: 'festive', name: 'Festivo' },
@@ -186,10 +187,12 @@ function loadPets() {
         const storedPets = localStorage.getItem(CONFIG.STORAGE_KEY);
         if (storedPets) {
             AppState.pets = JSON.parse(storedPets);
+            console.log('Mascotas cargadas:', AppState.pets.length);
         }
     } catch (error) {
         console.error('Error al cargar mascotas:', error);
         showSuccessMessage('Error al cargar datos guardados');
+        AppState.pets = [];
     }
     renderPets();
     updateTypeFilter();
@@ -198,9 +201,29 @@ function loadPets() {
 function savePets() {
     try {
         localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(AppState.pets));
+        console.log('Mascotas guardadas:', AppState.pets.length);
+        return true;
     } catch (error) {
         console.error('Error al guardar:', error);
-        showSuccessMessage('Error: Espacio de almacenamiento lleno');
+        
+        // Intentar limpiar espacio eliminando mascotas antiguas
+        if (AppState.pets.length > 1) {
+            const removedPet = AppState.pets.pop();
+            console.log('Eliminando mascota antigua para liberar espacio:', removedPet.name);
+            
+            // Intentar guardar nuevamente
+            try {
+                localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(AppState.pets));
+                showSuccessMessage('Se eliminó una mascota antigua para liberar espacio');
+                return true;
+            } catch (error2) {
+                showSuccessMessage('Error: Espacio de almacenamiento lleno');
+                return false;
+            }
+        } else {
+            showSuccessMessage('Error: Espacio de almacenamiento lleno');
+            return false;
+        }
     }
 }
 
@@ -251,19 +274,21 @@ function handleAddPet(e) {
 
 function addPetToApp(pet) {
     AppState.pets.unshift(pet);
-    savePets();
-    renderPets();
-    updateTypeFilter();
-    showSuccessMessage('¡Mascota agregada con éxito! 🦕🎄');
+    if (savePets()) {
+        renderPets();
+        updateTypeFilter();
+        showSuccessMessage('¡Mascota agregada con éxito! 🦕🎄');
+    }
 }
 
 function deletePet(petId) {
     if (confirm('¿Estás seguro de que quieres eliminar esta mascota?')) {
         AppState.pets = AppState.pets.filter(pet => pet.id !== petId);
-        savePets();
-        renderPets();
-        updateTypeFilter();
-        showSuccessMessage('Mascota eliminada 🗑️');
+        if (savePets()) {
+            renderPets();
+            updateTypeFilter();
+            showSuccessMessage('Mascota eliminada 🗑️');
+        }
     }
 }
 
@@ -271,9 +296,10 @@ function handleVote(petId) {
     const pet = AppState.pets.find(p => p.id === petId);
     if (pet) {
         pet.votes += 1;
-        savePets();
-        renderPets();
-        showSuccessMessage('¡Voto registrado! ❤️');
+        if (savePets()) {
+            renderPets();
+            showSuccessMessage('¡Voto registrado! ❤️');
+        }
     }
 }
 
@@ -312,7 +338,8 @@ function renderPets() {
                 
                 <div class="pet-image">
                     ${displayImage ? 
-                        `<img src="${displayImage}" alt="${pet.name}">` : 
+                        `<img src="${displayImage}" alt="${pet.name}" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                         <div class="pet-image-placeholder" style="display:none;">🦕</div>` : 
                         '<div class="pet-image-placeholder">🦕</div>'
                     }
                 </div>
@@ -627,10 +654,11 @@ function applyEdits() {
     const editedImage = canvas.toDataURL('image/jpeg', CONFIG.IMAGE_QUALITY);
     
     AppState.editingPet.editedImage = editedImage;
-    savePets();
-    renderPets();
-    closeEditor();
-    showSuccessMessage('¡Edición guardada! ✨');
+    if (savePets()) {
+        renderPets();
+        closeEditor();
+        showSuccessMessage('¡Edición guardada! ✨');
+    }
 }
 
 function toggleTheme() {
